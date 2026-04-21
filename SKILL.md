@@ -7,8 +7,6 @@ description: Turn plain-English scene descriptions into walkable 3D environments
 
 Build walkable 3D scenes from text descriptions. The solver handles *where* things go. You handle *what things look like* — fresh, every scene, every piece.
 
-This skill is still **under construction**. Read `CHECKLIST.md` first to know what works and what's a stub. The philosophy and workflow below describe the target; some of the machinery to support it isn't built yet.
-
 ---
 
 ## The core philosophy
@@ -72,11 +70,15 @@ The DSL is intentionally small. You can write a 46-piece scene in ~35 tokens of 
 
 ### 3. Run the solver
 
-```bash
-python scripts/dropgrid_run.py --scene my_scene.txt --output my_scene.html --ascii-only
+```python
+import sys; sys.path.insert(0, "scripts")
+from dropgrid.api import solve_object_scene
+
+result = solve_object_scene(DSL, seed=42, debug=False)
+print(result.to_ascii(include_legend=True))
 ```
 
-The `--ascii-only` flag skips HTML generation on the first pass — you just want to see the layout. The solver returns an ASCII map showing piece positions.
+The solver returns a `SceneResult` with every placed piece. `.to_ascii()` prints the grid so you can see the layout before committing to geometry authoring.
 
 ### 4. Read the ASCII. Decide.
 
@@ -96,25 +98,67 @@ See `references/checklists.md` for what to look for in verification output.
 
 ### 6. Author geometry per piece
 
-**⚠ This step is partially stubbed. See `scripts/authoring/README.md`.**
+First, get the context packet for every piece:
 
-For each placed piece, you supply the geometry — a small arrangement of Three.js primitives (boxes, cylinders, cones, spheres) that represents that specific piece. You see the piece's local context (neighbors, distances, what it's facing) and use it to shape the geometry.
+```python
+from authoring.context_exporter import export_all_contexts
+contexts = export_all_contexts(result)
+```
+
+Each context packet tells you: is this piece on the edge or interior? Is it near a path? Which way is "outward"? Who are its nearest neighbors? Use this to shape the geometry.
+
+For each piece, produce a geometry packet — a list of Three.js-style primitives in the piece's local coordinate space (y = 0 is the floor):
+
+```python
+packet = {
+    "piece_id": 7,
+    "primitives": [
+        {
+            "shape": "cylinder",
+            "dimensions": [0.14, 0.18, 1.1],
+            "position": [0.0, 0.55, 0.0],
+            "rotation": [0.0, 0.0, 4.0],   # degrees
+            "material": {"color": "#4a3218", "roughness": 0.9}
+        },
+        {
+            "shape": "cone",
+            "dimensions": [0.5, 1.1],
+            "position": [-0.06, 1.65, 0.06],
+            "rotation": [0.0, 0.0, 5.0],
+            "material": {"color": "#2a5022", "roughness": 0.85}
+        }
+    ]
+}
+```
+
+Then validate all packets at once:
+
+```python
+from authoring.geometry_receiver import receive_all
+packets = receive_all([packet_1, packet_2, ...])   # raises GeometryError if any are invalid
+```
 
 Not "here is *the* tree." Here is *this tree, in this spot, with these neighbors.*
 
-Read `references/threejs-conventions.md` for the primitive vocabulary and how to compose them. Read `references/authoring_guide.md` (TODO — not yet written) for the context-aware authoring approach.
+Read `references/authoring_guide.md` for the full context-aware authoring approach and `scripts/authoring/schema.md` for the packet format reference.
 
-### 7. Scaffold the HTML
+### 7. Assemble the HTML
 
-```bash
-python scripts/scaffold/scaffold_v4_walkmode.py [args]
+```python
+from scaffold.scaffold_v4_walkmode import generate_scene_html
+
+html = generate_scene_html(result, packets, title="Forest Shrine")
+with open("forest_shrine.html", "w") as f:
+    f.write(html)
 ```
 
 Produces a standalone `.html` file with:
-- Orbit camera for overview
-- First-person walk mode (WASD + mouse, press F to toggle)
+- Orbit camera auto-framed to the scene
+- First-person walk mode (WASD + mouse, press **F** to toggle)
 - HUD with position and compass
 - No build step, no dependencies — opens in any browser
+
+Pieces without a geometry packet get a grey placeholder box, so partial authoring sessions still render.
 
 ### 8. Iterate with the user
 
@@ -136,19 +180,26 @@ The user walks through it. They say "the lanterns are too close to the path" or 
 
 ## Working with existing scenes
 
-The `examples/` folder has pre-rendered HTML scenes from the source projects (forest_shrine_v2, village_scene). **Look at them to understand what output is possible, but do not extract their geometry to reuse.** They were made by an older version of the pipeline that had baked-in per-type geometry. The skill you are building instead authors fresh.
+The `examples/` folder has pre-rendered HTML scenes (`forest_shrine_v2`, `village_scene`). **Look at them to understand what output is possible, but do not extract their geometry to reuse.** They were made with baked-in per-type geometry — the approach this skill deliberately replaces. Study them for spatial composition, not for primitive arrangements.
 
 ---
 
-## What's built, what's stubbed
+## What's built
 
-Read **`CHECKLIST.md`** for a complete inventory. Summary:
+The full pipeline is operational:
 
-**Working:** solver, DSL parser, verifiers (braille, path walk, spatial validate), HTML scaffold with walk mode, ASCII exporter.
+| Module | Location | Status |
+|--------|----------|--------|
+| Placement solver | `scripts/dropgrid/api.py` | ✅ working |
+| DSL parser | `scripts/dropgrid/parser.py` | ✅ working |
+| ASCII exporter | `scripts/dropgrid/exporters.py` | ✅ working |
+| Per-piece context exporter | `scripts/authoring/context_exporter.py` | ✅ working |
+| Geometry packet receiver | `scripts/authoring/geometry_receiver.py` | ✅ working |
+| HTML scaffold + walk mode | `scripts/scaffold/scaffold_v4_walkmode.py` | ✅ working |
+| Scene HTML from packets | `generate_scene_html()` in scaffold | ✅ working |
+| Verifiers (braille, path walk, spatial) | `scripts/verification/` | ✅ working |
 
-**Stubbed:** per-piece context exporter, geometry authoring protocol, renderer rewiring to accept LLM-authored geometry, full end-to-end worked example.
-
-If a user asks for a scene and the authoring pieces aren't built yet, you can still produce a valid scene using the baked-in geometry path in `dropgrid_run.py` — just be honest that it's not the handcrafted version. Or fall back to authoring by hand in the HTML if the user is okay with manual work.
+Read `CHECKLIST.md` for tier 2/3 items and known gaps.
 
 ---
 
@@ -159,13 +210,15 @@ Load these when needed — don't try to read them all upfront.
 | File | When to read it |
 |------|-----------------|
 | `references/philosophy.md` | Full writeup of the toddler-with-blocks principle |
+| `references/authoring_guide.md` | How to author context-aware geometry — the craft guide |
 | `references/dsl_reference.md` | Writing the scene description |
 | `references/threejs-conventions.md` | Composing geometry from primitives |
+| `scripts/authoring/schema.md` | Geometry packet JSON schema |
 | `references/braille-spatial.md` | Reading braille verifier output |
 | `references/checklists.md` | Verification passes — what to look for |
 | `references/narrative-decomposition.md` | Turning a user's description into a DSL |
 | `references/script-recipes.md` | Common Three.js patterns |
-| `references/worked_examples/` | End-to-end traces (placement only; full loop TODO) |
+| `references/worked_examples/full_loop_example.md` | Full end-to-end trace: DSL → solver → context → authored geometry → HTML |
 
 ---
 
