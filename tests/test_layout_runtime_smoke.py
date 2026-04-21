@@ -2,8 +2,8 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.dropgrid.layout_compiler import compile_layout_dsl_to_legacy_spec
-from scripts.dropgrid.layout_runtime import solve_layout_dsl
+from scripts.dropgrid.topology_candidate.layout_compiler import compile_layout_dsl_to_legacy_spec
+from scripts.dropgrid.topology_candidate.layout_runtime import solve_layout_dsl
 
 
 SMOKE_SCENE = """
