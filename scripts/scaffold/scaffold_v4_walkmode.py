@@ -26,6 +26,7 @@ import sys
 def generate_scaffold(
     title: str = "3D Model",
     camera_pos: tuple[float, float, float] = (10, 10, 20),
+    orbit_target: tuple[float, float, float] | None = None,
     bg_color: str = "#1a1a2e",
     show_grid: bool = True,
     show_axes: bool = True,
@@ -79,6 +80,7 @@ def generate_scaffold(
         scene.add(axesHelper);""" if show_axes else ""
 
     cx, cy, cz = camera_pos
+    otx, oty, otz = orbit_target if orbit_target is not None else (0, cy * 0.3, 0)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -224,7 +226,7 @@ def generate_scaffold(
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
-    controls.target.set(0, {cy * 0.3:.1f}, 0);
+    controls.target.set({otx:.1f}, {oty:.1f}, {otz:.1f});
 
     // Render loop
     function animate() {{
@@ -265,7 +267,7 @@ def generate_scaffold(
                 controls.enabled = true;
                 document.exitPointerLock();
                 camera.position.set({cx}, {cy}, {cz});
-                controls.target.set(0, {cy * 0.3:.1f}, 0);
+                controls.target.set({otx:.1f}, {oty:.1f}, {otz:.1f});
             }}
         }}
 
@@ -331,6 +333,144 @@ def generate_scaffold(
 </script>
 </body>
 </html>"""
+
+
+# ── Packet → Three.js code generation ─────────────────────────────────────────
+
+def _hex_to_js_int(color: str) -> str:
+    """'#aabbcc' → '0xaabbcc'"""
+    return "0x" + color.lstrip("#").lower()
+
+
+def _geo_js(shape: str, dims: list) -> str:
+    """Return a Three.js geometry constructor call for the given shape and dims."""
+    if shape == "box":
+        w, h, d = dims
+        return f"new THREE.BoxGeometry({w}, {h}, {d})"
+    if shape == "cylinder":
+        rt, rb, h = dims
+        return f"new THREE.CylinderGeometry({rt}, {rb}, {h}, 16)"
+    if shape == "cone":
+        r, h = dims
+        return f"new THREE.CylinderGeometry(0, {r}, {h}, 16)"
+    if shape == "sphere":
+        r = dims[0]
+        return f"new THREE.SphereGeometry({r}, 16, 12)"
+    if shape == "plane":
+        w, h = dims
+        return f"new THREE.PlaneGeometry({w}, {h})"
+    raise ValueError(f"Unknown shape: {shape!r}")
+
+
+def _mat_js(mat: dict) -> str:
+    """Return a Three.js MeshStandardMaterial constructor call."""
+    color = _hex_to_js_int(mat["color"])
+    roughness = mat.get("roughness", 0.85)
+    metalness = mat.get("metalness", 0.05)
+    props = f"color: {color}, roughness: {roughness}, metalness: {metalness}"
+    if "emissive" in mat:
+        em = _hex_to_js_int(mat["emissive"])
+        ei = mat.get("emissive_intensity", 0.5)
+        props += f", emissive: {em}, emissiveIntensity: {ei}"
+    return f"new THREE.MeshStandardMaterial({{ {props} }})"
+
+
+def build_body_from_packets(pieces: list, packets: dict) -> str:
+    """Generate a Three.js buildModel() function body from solver pieces + geometry packets.
+
+    pieces  — list of Piece objects from SceneResult.pieces
+    packets — {piece_id: normalised_packet} from geometry_receiver.receive_all()
+
+    Pieces without a geometry packet get a grey placeholder box so the scene
+    is always fully populated even during partial authoring sessions.
+    """
+    lines = ["    function buildModel(scene) {", "        const g = new THREE.Group();", ""]
+
+    for piece in pieces:
+        pid = piece.id
+        lines.append(f"        // piece {pid}: {piece.type} ({piece.label})")
+        lines.append("        {")
+        lines.append("            const pg = new THREE.Group();")
+        lines.append(f"            pg.position.set({piece.gx}, {piece.gy}, {piece.gz});")
+        # Each rot step is 90° around y-axis; Three.js uses radians
+        rot_rad = piece.rot * 1.5707963267948966  # π/2
+        lines.append(f"            pg.rotation.y = {rot_rad:.6f};")
+
+        if pid in packets:
+            for i, prim in enumerate(packets[pid]["primitives"]):
+                px, py, pz = prim["position"]
+                rx, ry, rz = [v * 0.017453292519943295 for v in prim["rotation"]]  # deg→rad
+                lines.append(f"            const geo{i} = {_geo_js(prim['shape'], prim['dimensions'])};")
+                lines.append(f"            const mat{i} = {_mat_js(prim['material'])};")
+                lines.append(f"            const mesh{i} = new THREE.Mesh(geo{i}, mat{i});")
+                lines.append(f"            mesh{i}.position.set({px}, {py}, {pz});")
+                lines.append(f"            mesh{i}.rotation.set({rx:.6f}, {ry:.6f}, {rz:.6f});")
+                lines.append(f"            mesh{i}.castShadow = true;")
+                lines.append(f"            mesh{i}.receiveShadow = true;")
+                lines.append(f"            pg.add(mesh{i});")
+        else:
+            # Placeholder: grey 0.5×1×0.5 box centred 0.5 above floor
+            lines.append("            const geo0 = new THREE.BoxGeometry(0.5, 1.0, 0.5);")
+            lines.append("            const mat0 = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.8 });")
+            lines.append("            const mesh0 = new THREE.Mesh(geo0, mat0);")
+            lines.append("            mesh0.position.set(0, 0.5, 0);")
+            lines.append("            mesh0.castShadow = true;")
+            lines.append("            mesh0.receiveShadow = true;")
+            lines.append("            pg.add(mesh0);")
+
+        lines.append("            g.add(pg);")
+        lines.append("        }")
+        lines.append("")
+
+    lines.append("        scene.add(g);")
+    lines.append("        return g;")
+    lines.append("    }")
+    return "\n".join(lines)
+
+
+def generate_scene_html(
+    scene_result,
+    packets: dict,
+    title: str = "3D Scene",
+    bg_color: str = "#1a1a2e",
+    show_grid: bool = True,
+    show_axes: bool = False,
+) -> str:
+    """Generate a complete Three.js HTML page from a SceneResult + geometry packets.
+
+    scene_result — SceneResult from solve_object_scene()
+    packets      — {piece_id: normalised_packet} from geometry_receiver.receive_all()
+                   May be partial; unpacketed pieces get a grey placeholder.
+    """
+    pieces = scene_result.pieces
+
+    # Auto-position camera to frame the whole scene
+    if pieces:
+        cx = sum(p.gx for p in pieces) / len(pieces)
+        cz = sum(p.gz for p in pieces) / len(pieces)
+        spread = max(
+            max(abs(p.gx - cx) for p in pieces),
+            max(abs(p.gz - cz) for p in pieces),
+            1,
+        )
+        cam_y = max(10, spread * 0.9)
+        cam_z = cz + spread * 1.5
+        camera_pos = (cx, cam_y, cam_z)
+    else:
+        cx, cz = 0.0, 0.0
+        camera_pos = (15, 15, 30)
+
+    build_body = build_body_from_packets(pieces, packets)
+
+    return generate_scaffold(
+        title=title,
+        camera_pos=camera_pos,
+        orbit_target=(cx, 0, cz),
+        bg_color=bg_color,
+        show_grid=show_grid,
+        show_axes=show_axes,
+        build_body=build_body,
+    )
 
 
 def main():
