@@ -26,6 +26,7 @@ import sys
 def generate_scaffold(
     title: str = "3D Model",
     camera_pos: tuple[float, float, float] = (10, 10, 20),
+    orbit_target: tuple[float, float, float] | None = None,
     bg_color: str = "#1a1a2e",
     show_grid: bool = True,
     show_axes: bool = True,
@@ -79,6 +80,7 @@ def generate_scaffold(
         scene.add(axesHelper);""" if show_axes else ""
 
     cx, cy, cz = camera_pos
+    otx, oty, otz = orbit_target if orbit_target is not None else (0, cy * 0.3, 0)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -224,7 +226,7 @@ def generate_scaffold(
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
-    controls.target.set(0, {cy * 0.3:.1f}, 0);
+    controls.target.set({otx:.1f}, {oty:.1f}, {otz:.1f});
 
     // Render loop
     function animate() {{
@@ -265,7 +267,7 @@ def generate_scaffold(
                 controls.enabled = true;
                 document.exitPointerLock();
                 camera.position.set({cx}, {cy}, {cz});
-                controls.target.set(0, {cy * 0.3:.1f}, 0);
+                controls.target.set({otx:.1f}, {oty:.1f}, {otz:.1f});
             }}
         }}
 
@@ -455,6 +457,7 @@ def generate_scene_html(
         cam_z = cz + spread * 1.5
         camera_pos = (cx, cam_y, cam_z)
     else:
+        cx, cz = 0.0, 0.0
         camera_pos = (15, 15, 30)
 
     build_body = build_body_from_packets(pieces, packets)
@@ -462,6 +465,7 @@ def generate_scene_html(
     return generate_scaffold(
         title=title,
         camera_pos=camera_pos,
+        orbit_target=(cx, 0, cz),
         bg_color=bg_color,
         show_grid=show_grid,
         show_axes=show_axes,
