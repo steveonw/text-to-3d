@@ -1,0 +1,1269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Village Market</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { overflow: hidden; background: #1a1a2e; }
+  canvas { display: block; }
+  #info {
+    position: fixed; top: 12px; left: 12px;
+    color: #aaa; font: 13px/1.4 monospace;
+    background: rgba(0,0,0,0.5); padding: 8px 12px;
+    border-radius: 6px; pointer-events: none;
+    max-width: 320px;
+  }
+</style>
+</head>
+<body>
+
+<div id="info">
+  <strong>Village Market</strong><br>
+  Orbit: drag &middot; Zoom: scroll &middot; Pan: right-drag
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // Make THREE available globally for buildModel compatibility
+    window.THREE = THREE;
+
+    // ══════════════════════════════════════════════════════════
+    //  PARAMETERS
+    // ══════════════════════════════════════════════════════════
+    // ── Central parameters ──────────────────────────────────
+    // Edit these, everything else derives from them.
+    const PARAMS = {
+        // overall
+        unit: 'm',
+        groundY: 0,
+
+        // example part
+        baseWidth: 4,
+        baseDepth: 3,
+        baseHeight: 0.5,
+    };
+
+    // ══════════════════════════════════════════════════════════
+    //  MATERIAL PALETTE
+    // ══════════════════════════════════════════════════════════
+    const _matCache = {};
+    function matByName(name) {
+        if (_matCache[name]) return _matCache[name];
+        const palette = {
+            stone:      { color: 0xc4b8a8, roughness: 0.85, metalness: 0.0 },
+            brick:      { color: 0xa0522d, roughness: 0.75, metalness: 0.0 },
+            metal:      { color: 0x555555, roughness: 0.45, metalness: 0.8 },
+            metal_pol:  { color: 0xcccccc, roughness: 0.15, metalness: 0.95 },
+            wood:       { color: 0x5c3a1e, roughness: 0.80, metalness: 0.0 },
+            wood_furn:  { color: 0x8b6914, roughness: 0.70, metalness: 0.0 },
+            wood_dark:  { color: 0x5c3a1e, roughness: 0.80, metalness: 0.0 },
+            plaster:    { color: 0xd4c5a9, roughness: 0.90, metalness: 0.0 },
+            floor:      { color: 0x6b4423, roughness: 0.85, metalness: 0.0 },
+            grass:      { color: 0x556b2f, roughness: 0.90, metalness: 0.0 },
+            marble:     { color: 0xf0ece0, roughness: 0.40, metalness: 0.0 },
+            accent:     { color: 0xcc4444, roughness: 0.50, metalness: 0.0 },
+            roof:       { color: 0x8b3a3a, roughness: 0.75, metalness: 0.0 },
+            cloth:      { color: 0x4444aa, roughness: 0.85, metalness: 0.0 },
+            cloth_dark: { color: 0x333355, roughness: 0.85, metalness: 0.0 },
+            skin:       { color: 0xddaa88, roughness: 0.70, metalness: 0.0 },
+            leaf:       { color: 0x33aa44, roughness: 0.75, metalness: 0.0 },
+        };
+        const props = palette[name];
+        let mat;
+        if (name === 'glass') {
+            mat = new THREE.MeshPhysicalMaterial({ color: 0x88bbdd, transmission: 0.9, roughness: 0.05 });
+        } else if (props) {
+            mat = new THREE.MeshStandardMaterial(props);
+        } else {
+            // Try parsing as hex color string
+            if (typeof name === 'string' && name.startsWith('#')) {
+                mat = new THREE.MeshStandardMaterial({ color: parseInt(name.slice(1), 16), roughness: 0.75 });
+            } else {
+                mat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.80, metalness: 0.1 });
+            }
+        }
+        _matCache[name] = mat;
+        return mat;
+    }
+
+    // ══════════════════════════════════════════════════════════
+    //  BUILD MODEL
+    // ══════════════════════════════════════════════════════════
+    function buildModel(scene) {
+        const g = new THREE.Group();
+
+        // piece 1: well (plaza_center)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(14, 0, 12);
+            pg.rotation.y = 0.000000;
+            const geo0 = new THREE.CylinderGeometry(0.55, 0.55, 0.7, 16);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x8a8070, roughness: 0.9, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.35, 0.0);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            const geo1 = new THREE.CylinderGeometry(0.62, 0.62, 0.06, 16);
+            const mat1 = new THREE.MeshStandardMaterial({ color: 0x7a7060, roughness: 0.85, metalness: 0.0 });
+            const mesh1 = new THREE.Mesh(geo1, mat1);
+            mesh1.position.set(0.0, 0.73, 0.0);
+            mesh1.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh1.castShadow = true;
+            mesh1.receiveShadow = true;
+            pg.add(mesh1);
+            const geo2 = new THREE.CylinderGeometry(0.45, 0.45, 0.05, 16);
+            const mat2 = new THREE.MeshStandardMaterial({ color: 0x1a2a3a, roughness: 0.2, metalness: 0.1 });
+            const mesh2 = new THREE.Mesh(geo2, mat2);
+            mesh2.position.set(0.0, 0.75, 0.0);
+            mesh2.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh2.castShadow = true;
+            mesh2.receiveShadow = true;
+            pg.add(mesh2);
+            const geo3 = new THREE.BoxGeometry(1.1, 0.06, 0.06);
+            const mat3 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh3 = new THREE.Mesh(geo3, mat3);
+            mesh3.position.set(0.0, 1.1, 0.0);
+            mesh3.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh3.castShadow = true;
+            mesh3.receiveShadow = true;
+            pg.add(mesh3);
+            const geo4 = new THREE.CylinderGeometry(0.03, 0.03, 0.4, 16);
+            const mat4 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh4 = new THREE.Mesh(geo4, mat4);
+            mesh4.position.set(-0.55, 0.9, 0.0);
+            mesh4.rotation.set(0.000000, 0.000000, 1.570796);
+            mesh4.castShadow = true;
+            mesh4.receiveShadow = true;
+            pg.add(mesh4);
+            const geo5 = new THREE.CylinderGeometry(0.03, 0.03, 0.4, 16);
+            const mat5 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh5 = new THREE.Mesh(geo5, mat5);
+            mesh5.position.set(0.55, 0.9, 0.0);
+            mesh5.rotation.set(0.000000, 0.000000, 1.570796);
+            mesh5.castShadow = true;
+            mesh5.receiveShadow = true;
+            pg.add(mesh5);
+            g.add(pg);
+        }
+
+        // piece 2: road (market_road_0)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(17, 0, 12);
+            pg.rotation.y = 0.000000;
+            const geo0 = new THREE.BoxGeometry(0.96, 0.04, 0.96);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x645f5a, roughness: 0.95, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.02, 0.0);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            g.add(pg);
+        }
+
+        // piece 3: road (market_road_1)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(18, 0, 12);
+            pg.rotation.y = 0.000000;
+            const geo0 = new THREE.BoxGeometry(0.96, 0.04, 0.96);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x5e5954, roughness: 0.95, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.02, 0.0);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            g.add(pg);
+        }
+
+        // piece 4: road (market_road_2)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(19, 0, 12);
+            pg.rotation.y = 0.000000;
+            const geo0 = new THREE.BoxGeometry(0.96, 0.04, 0.96);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x66615c, roughness: 0.95, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.02, 0.0);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            g.add(pg);
+        }
+
+        // piece 5: road (market_road_3)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(20, 0, 12);
+            pg.rotation.y = 0.000000;
+            const geo0 = new THREE.BoxGeometry(0.96, 0.04, 0.96);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x6e6964, roughness: 0.95, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.02, 0.0);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            g.add(pg);
+        }
+
+        // piece 6: road (market_road_4)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(21, 0, 12);
+            pg.rotation.y = 0.000000;
+            const geo0 = new THREE.BoxGeometry(0.96, 0.04, 0.96);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x5b5651, roughness: 0.95, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.02, 0.0);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            g.add(pg);
+        }
+
+        // piece 7: road (market_road_5)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(22, 0, 12);
+            pg.rotation.y = 0.000000;
+            const geo0 = new THREE.BoxGeometry(0.96, 0.04, 0.96);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x5c5752, roughness: 0.95, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.02, 0.0);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            g.add(pg);
+        }
+
+        // piece 8: road (market_road_6)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(23, 0, 12);
+            pg.rotation.y = 0.000000;
+            const geo0 = new THREE.BoxGeometry(0.96, 0.04, 0.96);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x6b6661, roughness: 0.95, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.02, 0.0);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            g.add(pg);
+        }
+
+        // piece 9: road (market_road_7)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(24, 0, 12);
+            pg.rotation.y = 0.000000;
+            const geo0 = new THREE.BoxGeometry(0.96, 0.04, 0.96);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x5d5853, roughness: 0.95, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.02, 0.0);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            g.add(pg);
+        }
+
+        // piece 10: road (market_road_8)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(25, 0, 12);
+            pg.rotation.y = 0.000000;
+            const geo0 = new THREE.BoxGeometry(0.96, 0.04, 0.96);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x65605b, roughness: 0.95, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.02, 0.0);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            g.add(pg);
+        }
+
+        // piece 11: road (market_road_9)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(25, 0, 11);
+            pg.rotation.y = 1.570796;
+            const geo0 = new THREE.BoxGeometry(0.96, 0.04, 0.96);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x6c6762, roughness: 0.95, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.02, 0.0);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            g.add(pg);
+        }
+
+        // piece 12: road (market_road_10)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(25, 0, 10);
+            pg.rotation.y = 1.570796;
+            const geo0 = new THREE.BoxGeometry(0.96, 0.04, 0.96);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x5b5651, roughness: 0.95, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.02, 0.0);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            g.add(pg);
+        }
+
+        // piece 13: road (market_road_11)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(25, 0, 9);
+            pg.rotation.y = 1.570796;
+            const geo0 = new THREE.BoxGeometry(0.96, 0.04, 0.96);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x6a6560, roughness: 0.95, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.02, 0.0);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            g.add(pg);
+        }
+
+        // piece 14: stall (stalls_0)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(14, 0, 18);
+            pg.rotation.y = 1.570796;
+            const geo0 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(-0.3, 0.35, -0.25);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            const geo1 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat1 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh1 = new THREE.Mesh(geo1, mat1);
+            mesh1.position.set(0.3, 0.35, -0.25);
+            mesh1.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh1.castShadow = true;
+            mesh1.receiveShadow = true;
+            pg.add(mesh1);
+            const geo2 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat2 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh2 = new THREE.Mesh(geo2, mat2);
+            mesh2.position.set(-0.3, 0.35, 0.25);
+            mesh2.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh2.castShadow = true;
+            mesh2.receiveShadow = true;
+            pg.add(mesh2);
+            const geo3 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat3 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh3 = new THREE.Mesh(geo3, mat3);
+            mesh3.position.set(0.3, 0.35, 0.25);
+            mesh3.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh3.castShadow = true;
+            mesh3.receiveShadow = true;
+            pg.add(mesh3);
+            const geo4 = new THREE.BoxGeometry(0.7, 0.06, 0.55);
+            const mat4 = new THREE.MeshStandardMaterial({ color: 0x8b6914, roughness: 0.75, metalness: 0.0 });
+            const mesh4 = new THREE.Mesh(geo4, mat4);
+            mesh4.position.set(-0.04, 0.73, 0.0);
+            mesh4.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh4.castShadow = true;
+            mesh4.receiveShadow = true;
+            pg.add(mesh4);
+            const geo5 = new THREE.BoxGeometry(0.82, 0.04, 0.65);
+            const mat5 = new THREE.MeshStandardMaterial({ color: 0x27ae60, roughness: 0.85, metalness: 0.0 });
+            const mesh5 = new THREE.Mesh(geo5, mat5);
+            mesh5.position.set(-0.04, 1.15, 0.0);
+            mesh5.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh5.castShadow = true;
+            mesh5.receiveShadow = true;
+            pg.add(mesh5);
+            const geo6 = new THREE.BoxGeometry(0.82, 0.22, 0.03);
+            const mat6 = new THREE.MeshStandardMaterial({ color: 0x27ae60, roughness: 0.85, metalness: 0.0 });
+            const mesh6 = new THREE.Mesh(geo6, mat6);
+            mesh6.position.set(-0.04, 1.04, -0.32);
+            mesh6.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh6.castShadow = true;
+            mesh6.receiveShadow = true;
+            pg.add(mesh6);
+            g.add(pg);
+        }
+
+        // piece 15: stall (stalls_1)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(8, 0, 12);
+            pg.rotation.y = 0.000000;
+            const geo0 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(-0.3, 0.35, -0.25);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            const geo1 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat1 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh1 = new THREE.Mesh(geo1, mat1);
+            mesh1.position.set(0.3, 0.35, -0.25);
+            mesh1.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh1.castShadow = true;
+            mesh1.receiveShadow = true;
+            pg.add(mesh1);
+            const geo2 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat2 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh2 = new THREE.Mesh(geo2, mat2);
+            mesh2.position.set(-0.3, 0.35, 0.25);
+            mesh2.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh2.castShadow = true;
+            mesh2.receiveShadow = true;
+            pg.add(mesh2);
+            const geo3 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat3 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh3 = new THREE.Mesh(geo3, mat3);
+            mesh3.position.set(0.3, 0.35, 0.25);
+            mesh3.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh3.castShadow = true;
+            mesh3.receiveShadow = true;
+            pg.add(mesh3);
+            const geo4 = new THREE.BoxGeometry(0.7, 0.06, 0.55);
+            const mat4 = new THREE.MeshStandardMaterial({ color: 0x8b6914, roughness: 0.75, metalness: 0.0 });
+            const mesh4 = new THREE.Mesh(geo4, mat4);
+            mesh4.position.set(-0.04, 0.73, 0.0);
+            mesh4.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh4.castShadow = true;
+            mesh4.receiveShadow = true;
+            pg.add(mesh4);
+            const geo5 = new THREE.BoxGeometry(0.82, 0.04, 0.65);
+            const mat5 = new THREE.MeshStandardMaterial({ color: 0x8e44ad, roughness: 0.85, metalness: 0.0 });
+            const mesh5 = new THREE.Mesh(geo5, mat5);
+            mesh5.position.set(-0.04, 1.15, 0.0);
+            mesh5.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh5.castShadow = true;
+            mesh5.receiveShadow = true;
+            pg.add(mesh5);
+            const geo6 = new THREE.BoxGeometry(0.82, 0.22, 0.03);
+            const mat6 = new THREE.MeshStandardMaterial({ color: 0x8e44ad, roughness: 0.85, metalness: 0.0 });
+            const mesh6 = new THREE.Mesh(geo6, mat6);
+            mesh6.position.set(-0.04, 1.04, -0.32);
+            mesh6.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh6.castShadow = true;
+            mesh6.receiveShadow = true;
+            pg.add(mesh6);
+            g.add(pg);
+        }
+
+        // piece 16: stall (stalls_2)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(14, 0, 6);
+            pg.rotation.y = 1.570796;
+            const geo0 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(-0.3, 0.35, -0.25);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            const geo1 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat1 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh1 = new THREE.Mesh(geo1, mat1);
+            mesh1.position.set(0.3, 0.35, -0.25);
+            mesh1.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh1.castShadow = true;
+            mesh1.receiveShadow = true;
+            pg.add(mesh1);
+            const geo2 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat2 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh2 = new THREE.Mesh(geo2, mat2);
+            mesh2.position.set(-0.3, 0.35, 0.25);
+            mesh2.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh2.castShadow = true;
+            mesh2.receiveShadow = true;
+            pg.add(mesh2);
+            const geo3 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat3 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh3 = new THREE.Mesh(geo3, mat3);
+            mesh3.position.set(0.3, 0.35, 0.25);
+            mesh3.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh3.castShadow = true;
+            mesh3.receiveShadow = true;
+            pg.add(mesh3);
+            const geo4 = new THREE.BoxGeometry(0.7, 0.06, 0.55);
+            const mat4 = new THREE.MeshStandardMaterial({ color: 0x8b6914, roughness: 0.75, metalness: 0.0 });
+            const mesh4 = new THREE.Mesh(geo4, mat4);
+            mesh4.position.set(-0.04, 0.73, 0.0);
+            mesh4.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh4.castShadow = true;
+            mesh4.receiveShadow = true;
+            pg.add(mesh4);
+            const geo5 = new THREE.BoxGeometry(0.82, 0.04, 0.65);
+            const mat5 = new THREE.MeshStandardMaterial({ color: 0xd35400, roughness: 0.85, metalness: 0.0 });
+            const mesh5 = new THREE.Mesh(geo5, mat5);
+            mesh5.position.set(-0.04, 1.15, 0.0);
+            mesh5.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh5.castShadow = true;
+            mesh5.receiveShadow = true;
+            pg.add(mesh5);
+            const geo6 = new THREE.BoxGeometry(0.82, 0.22, 0.03);
+            const mat6 = new THREE.MeshStandardMaterial({ color: 0xd35400, roughness: 0.85, metalness: 0.0 });
+            const mesh6 = new THREE.Mesh(geo6, mat6);
+            mesh6.position.set(-0.04, 1.04, -0.32);
+            mesh6.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh6.castShadow = true;
+            mesh6.receiveShadow = true;
+            pg.add(mesh6);
+            g.add(pg);
+        }
+
+        // piece 17: stall (stalls_3)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(20, 0, 13);
+            pg.rotation.y = 0.000000;
+            const geo0 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(-0.3, 0.35, -0.25);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            const geo1 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat1 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh1 = new THREE.Mesh(geo1, mat1);
+            mesh1.position.set(0.3, 0.35, -0.25);
+            mesh1.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh1.castShadow = true;
+            mesh1.receiveShadow = true;
+            pg.add(mesh1);
+            const geo2 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat2 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh2 = new THREE.Mesh(geo2, mat2);
+            mesh2.position.set(-0.3, 0.35, 0.25);
+            mesh2.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh2.castShadow = true;
+            mesh2.receiveShadow = true;
+            pg.add(mesh2);
+            const geo3 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat3 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh3 = new THREE.Mesh(geo3, mat3);
+            mesh3.position.set(0.3, 0.35, 0.25);
+            mesh3.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh3.castShadow = true;
+            mesh3.receiveShadow = true;
+            pg.add(mesh3);
+            const geo4 = new THREE.BoxGeometry(0.7, 0.06, 0.55);
+            const mat4 = new THREE.MeshStandardMaterial({ color: 0x8b6914, roughness: 0.75, metalness: 0.0 });
+            const mesh4 = new THREE.Mesh(geo4, mat4);
+            mesh4.position.set(0.04, 0.73, 0.0);
+            mesh4.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh4.castShadow = true;
+            mesh4.receiveShadow = true;
+            pg.add(mesh4);
+            const geo5 = new THREE.BoxGeometry(0.82, 0.04, 0.65);
+            const mat5 = new THREE.MeshStandardMaterial({ color: 0x16a085, roughness: 0.85, metalness: 0.0 });
+            const mesh5 = new THREE.Mesh(geo5, mat5);
+            mesh5.position.set(0.04, 1.15, 0.0);
+            mesh5.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh5.castShadow = true;
+            mesh5.receiveShadow = true;
+            pg.add(mesh5);
+            const geo6 = new THREE.BoxGeometry(0.82, 0.22, 0.03);
+            const mat6 = new THREE.MeshStandardMaterial({ color: 0x16a085, roughness: 0.85, metalness: 0.0 });
+            const mesh6 = new THREE.Mesh(geo6, mat6);
+            mesh6.position.set(0.04, 1.04, -0.32);
+            mesh6.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh6.castShadow = true;
+            mesh6.receiveShadow = true;
+            pg.add(mesh6);
+            g.add(pg);
+        }
+
+        // piece 18: stall (stalls_4)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(15, 0, 18);
+            pg.rotation.y = 1.570796;
+            const geo0 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(-0.3, 0.35, -0.25);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            const geo1 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat1 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh1 = new THREE.Mesh(geo1, mat1);
+            mesh1.position.set(0.3, 0.35, -0.25);
+            mesh1.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh1.castShadow = true;
+            mesh1.receiveShadow = true;
+            pg.add(mesh1);
+            const geo2 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat2 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh2 = new THREE.Mesh(geo2, mat2);
+            mesh2.position.set(-0.3, 0.35, 0.25);
+            mesh2.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh2.castShadow = true;
+            mesh2.receiveShadow = true;
+            pg.add(mesh2);
+            const geo3 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat3 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh3 = new THREE.Mesh(geo3, mat3);
+            mesh3.position.set(0.3, 0.35, 0.25);
+            mesh3.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh3.castShadow = true;
+            mesh3.receiveShadow = true;
+            pg.add(mesh3);
+            const geo4 = new THREE.BoxGeometry(0.7, 0.06, 0.55);
+            const mat4 = new THREE.MeshStandardMaterial({ color: 0x8b6914, roughness: 0.75, metalness: 0.0 });
+            const mesh4 = new THREE.Mesh(geo4, mat4);
+            mesh4.position.set(0.0, 0.73, 0.0);
+            mesh4.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh4.castShadow = true;
+            mesh4.receiveShadow = true;
+            pg.add(mesh4);
+            const geo5 = new THREE.BoxGeometry(0.82, 0.04, 0.65);
+            const mat5 = new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.85, metalness: 0.0 });
+            const mesh5 = new THREE.Mesh(geo5, mat5);
+            mesh5.position.set(0.0, 1.15, 0.0);
+            mesh5.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh5.castShadow = true;
+            mesh5.receiveShadow = true;
+            pg.add(mesh5);
+            const geo6 = new THREE.BoxGeometry(0.82, 0.22, 0.03);
+            const mat6 = new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.85, metalness: 0.0 });
+            const mesh6 = new THREE.Mesh(geo6, mat6);
+            mesh6.position.set(0.0, 1.04, -0.32);
+            mesh6.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh6.castShadow = true;
+            mesh6.receiveShadow = true;
+            pg.add(mesh6);
+            g.add(pg);
+        }
+
+        // piece 19: stall (stalls_5)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(8, 0, 13);
+            pg.rotation.y = 0.000000;
+            const geo0 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(-0.3, 0.35, -0.25);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            const geo1 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat1 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh1 = new THREE.Mesh(geo1, mat1);
+            mesh1.position.set(0.3, 0.35, -0.25);
+            mesh1.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh1.castShadow = true;
+            mesh1.receiveShadow = true;
+            pg.add(mesh1);
+            const geo2 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat2 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh2 = new THREE.Mesh(geo2, mat2);
+            mesh2.position.set(-0.3, 0.35, 0.25);
+            mesh2.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh2.castShadow = true;
+            mesh2.receiveShadow = true;
+            pg.add(mesh2);
+            const geo3 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat3 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh3 = new THREE.Mesh(geo3, mat3);
+            mesh3.position.set(0.3, 0.35, 0.25);
+            mesh3.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh3.castShadow = true;
+            mesh3.receiveShadow = true;
+            pg.add(mesh3);
+            const geo4 = new THREE.BoxGeometry(0.7, 0.06, 0.55);
+            const mat4 = new THREE.MeshStandardMaterial({ color: 0x8b6914, roughness: 0.75, metalness: 0.0 });
+            const mesh4 = new THREE.Mesh(geo4, mat4);
+            mesh4.position.set(-0.04, 0.73, 0.0);
+            mesh4.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh4.castShadow = true;
+            mesh4.receiveShadow = true;
+            pg.add(mesh4);
+            const geo5 = new THREE.BoxGeometry(0.82, 0.04, 0.65);
+            const mat5 = new THREE.MeshStandardMaterial({ color: 0x2980b9, roughness: 0.85, metalness: 0.0 });
+            const mesh5 = new THREE.Mesh(geo5, mat5);
+            mesh5.position.set(-0.04, 1.15, 0.0);
+            mesh5.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh5.castShadow = true;
+            mesh5.receiveShadow = true;
+            pg.add(mesh5);
+            const geo6 = new THREE.BoxGeometry(0.82, 0.22, 0.03);
+            const mat6 = new THREE.MeshStandardMaterial({ color: 0x2980b9, roughness: 0.85, metalness: 0.0 });
+            const mesh6 = new THREE.Mesh(geo6, mat6);
+            mesh6.position.set(-0.04, 1.04, -0.32);
+            mesh6.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh6.castShadow = true;
+            mesh6.receiveShadow = true;
+            pg.add(mesh6);
+            g.add(pg);
+        }
+
+        // piece 20: stall (stalls_6)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(13, 0, 6);
+            pg.rotation.y = 1.570796;
+            const geo0 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(-0.3, 0.35, -0.25);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            const geo1 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat1 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh1 = new THREE.Mesh(geo1, mat1);
+            mesh1.position.set(0.3, 0.35, -0.25);
+            mesh1.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh1.castShadow = true;
+            mesh1.receiveShadow = true;
+            pg.add(mesh1);
+            const geo2 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat2 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh2 = new THREE.Mesh(geo2, mat2);
+            mesh2.position.set(-0.3, 0.35, 0.25);
+            mesh2.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh2.castShadow = true;
+            mesh2.receiveShadow = true;
+            pg.add(mesh2);
+            const geo3 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat3 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh3 = new THREE.Mesh(geo3, mat3);
+            mesh3.position.set(0.3, 0.35, 0.25);
+            mesh3.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh3.castShadow = true;
+            mesh3.receiveShadow = true;
+            pg.add(mesh3);
+            const geo4 = new THREE.BoxGeometry(0.7, 0.06, 0.55);
+            const mat4 = new THREE.MeshStandardMaterial({ color: 0x8b6914, roughness: 0.75, metalness: 0.0 });
+            const mesh4 = new THREE.Mesh(geo4, mat4);
+            mesh4.position.set(-0.04, 0.73, 0.0);
+            mesh4.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh4.castShadow = true;
+            mesh4.receiveShadow = true;
+            pg.add(mesh4);
+            const geo5 = new THREE.BoxGeometry(0.82, 0.04, 0.65);
+            const mat5 = new THREE.MeshStandardMaterial({ color: 0x27ae60, roughness: 0.85, metalness: 0.0 });
+            const mesh5 = new THREE.Mesh(geo5, mat5);
+            mesh5.position.set(-0.04, 1.15, 0.0);
+            mesh5.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh5.castShadow = true;
+            mesh5.receiveShadow = true;
+            pg.add(mesh5);
+            const geo6 = new THREE.BoxGeometry(0.82, 0.22, 0.03);
+            const mat6 = new THREE.MeshStandardMaterial({ color: 0x27ae60, roughness: 0.85, metalness: 0.0 });
+            const mesh6 = new THREE.Mesh(geo6, mat6);
+            mesh6.position.set(-0.04, 1.04, -0.32);
+            mesh6.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh6.castShadow = true;
+            mesh6.receiveShadow = true;
+            pg.add(mesh6);
+            g.add(pg);
+        }
+
+        // piece 21: stall (stalls_7)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(20, 0, 11);
+            pg.rotation.y = 0.000000;
+            const geo0 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(-0.3, 0.35, -0.25);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            const geo1 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat1 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh1 = new THREE.Mesh(geo1, mat1);
+            mesh1.position.set(0.3, 0.35, -0.25);
+            mesh1.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh1.castShadow = true;
+            mesh1.receiveShadow = true;
+            pg.add(mesh1);
+            const geo2 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat2 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh2 = new THREE.Mesh(geo2, mat2);
+            mesh2.position.set(-0.3, 0.35, 0.25);
+            mesh2.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh2.castShadow = true;
+            mesh2.receiveShadow = true;
+            pg.add(mesh2);
+            const geo3 = new THREE.BoxGeometry(0.06, 0.7, 0.06);
+            const mat3 = new THREE.MeshStandardMaterial({ color: 0x5c3d1e, roughness: 0.85, metalness: 0.0 });
+            const mesh3 = new THREE.Mesh(geo3, mat3);
+            mesh3.position.set(0.3, 0.35, 0.25);
+            mesh3.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh3.castShadow = true;
+            mesh3.receiveShadow = true;
+            pg.add(mesh3);
+            const geo4 = new THREE.BoxGeometry(0.7, 0.06, 0.55);
+            const mat4 = new THREE.MeshStandardMaterial({ color: 0x8b6914, roughness: 0.75, metalness: 0.0 });
+            const mesh4 = new THREE.Mesh(geo4, mat4);
+            mesh4.position.set(0.04, 0.73, 0.0);
+            mesh4.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh4.castShadow = true;
+            mesh4.receiveShadow = true;
+            pg.add(mesh4);
+            const geo5 = new THREE.BoxGeometry(0.82, 0.04, 0.65);
+            const mat5 = new THREE.MeshStandardMaterial({ color: 0x8e44ad, roughness: 0.85, metalness: 0.0 });
+            const mesh5 = new THREE.Mesh(geo5, mat5);
+            mesh5.position.set(0.04, 1.15, 0.0);
+            mesh5.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh5.castShadow = true;
+            mesh5.receiveShadow = true;
+            pg.add(mesh5);
+            const geo6 = new THREE.BoxGeometry(0.82, 0.22, 0.03);
+            const mat6 = new THREE.MeshStandardMaterial({ color: 0x8e44ad, roughness: 0.85, metalness: 0.0 });
+            const mesh6 = new THREE.Mesh(geo6, mat6);
+            mesh6.position.set(0.04, 1.04, -0.32);
+            mesh6.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh6.castShadow = true;
+            mesh6.receiveShadow = true;
+            pg.add(mesh6);
+            g.add(pg);
+        }
+
+        // piece 22: tree (trees_0)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(14, 0, 21);
+            pg.rotation.y = 1.570796;
+            const geo0 = new THREE.CylinderGeometry(0.0934065225432968, 0.13343788934756687, 0.8536745452089154, 16);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x4a3218, roughness: 0.9, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.4268372726044577, 0.0);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            const geo1 = new THREE.CylinderGeometry(0, 0.4627258227056139, 1.0721989000381076, 16);
+            const mat1 = new THREE.MeshStandardMaterial({ color: 0x2a5022, roughness: 0.85, metalness: 0.0 });
+            const mesh1 = new THREE.Mesh(geo1, mat1);
+            mesh1.position.set(0.0, 1.3948787206071078, 0.0);
+            mesh1.rotation.set(0.000000, 0.030950, 0.000000);
+            mesh1.castShadow = true;
+            mesh1.receiveShadow = true;
+            pg.add(mesh1);
+            g.add(pg);
+        }
+
+        // piece 23: tree (trees_1)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(6, 0, 8);
+            pg.rotation.y = 0.000000;
+            const geo0 = new THREE.CylinderGeometry(0.11752859161980964, 0.1678979880282995, 0.94136342354827, 16);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x4a3218, roughness: 0.9, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.470681711774135, 0.0);
+            mesh0.rotation.set(-0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            const geo1 = new THREE.CylinderGeometry(0, 0.4945938873597606, 1.1748990713381222, 16);
+            const mat1 = new THREE.MeshStandardMaterial({ color: 0x2a5022, roughness: 0.85, metalness: 0.0 });
+            const mesh1 = new THREE.Mesh(geo1, mat1);
+            mesh1.position.set(-0.0, 1.4849991640509452, 0.0);
+            mesh1.rotation.set(-0.000000, 0.306589, 0.000000);
+            mesh1.castShadow = true;
+            mesh1.receiveShadow = true;
+            pg.add(mesh1);
+            g.add(pg);
+        }
+
+        // piece 24: tree (trees_2)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(22, 0, 7);
+            pg.rotation.y = 0.000000;
+            const geo0 = new THREE.CylinderGeometry(0.09719029105681416, 0.13884327293830595, 0.8123973283474428, 16);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x4a3218, roughness: 0.9, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.4061986641737214, 0.0);
+            mesh0.rotation.set(0.087266, 0.000000, -0.087266);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            const geo1 = new THREE.CylinderGeometry(0, 0.4834997346905639, 1.0399524449324815, 16);
+            const mat1 = new THREE.MeshStandardMaterial({ color: 0x2a5022, roughness: 0.85, metalness: 0.0 });
+            const mesh1 = new THREE.Mesh(geo1, mat1);
+            mesh1.position.set(0.07, 1.3242874551708301, -0.07);
+            mesh1.rotation.set(0.052360, 0.283102, -0.052360);
+            mesh1.castShadow = true;
+            mesh1.receiveShadow = true;
+            pg.add(mesh1);
+            g.add(pg);
+        }
+
+        // piece 25: tree (trees_3)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(15, 0, 21);
+            pg.rotation.y = 1.570796;
+            const geo0 = new THREE.CylinderGeometry(0.10668720375635876, 0.15241029108051252, 0.9427284224116836, 16);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x4a3218, roughness: 0.9, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.4713642112058418, 0.0);
+            mesh0.rotation.set(0.000000, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            const geo1 = new THREE.CylinderGeometry(0, 0.5023004042141808, 1.0309167137330775, 16);
+            const mat1 = new THREE.MeshStandardMaterial({ color: 0x2a5022, roughness: 0.85, metalness: 0.0 });
+            const mesh1 = new THREE.Mesh(geo1, mat1);
+            mesh1.position.set(0.0, 1.4653072184194016, 0.0);
+            mesh1.rotation.set(0.000000, 0.098369, 0.000000);
+            mesh1.castShadow = true;
+            mesh1.receiveShadow = true;
+            pg.add(mesh1);
+            g.add(pg);
+        }
+
+        // piece 26: tree (trees_4)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(6, 0, 9);
+            pg.rotation.y = 0.000000;
+            const geo0 = new THREE.CylinderGeometry(0.11093910144089231, 0.15848443062984616, 0.8243576439986834, 16);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x4a3218, roughness: 0.9, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.4121788219993417, 0.0);
+            mesh0.rotation.set(-0.087266, 0.000000, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            const geo1 = new THREE.CylinderGeometry(0, 0.48465524397000803, 1.1857028779520662, 16);
+            const mat1 = new THREE.MeshStandardMaterial({ color: 0x2a5022, roughness: 0.85, metalness: 0.0 });
+            const mesh1 = new THREE.Mesh(geo1, mat1);
+            mesh1.position.set(-0.07, 1.4168505324860659, 0.0);
+            mesh1.rotation.set(-0.052360, 0.278408, 0.000000);
+            mesh1.castShadow = true;
+            mesh1.receiveShadow = true;
+            pg.add(mesh1);
+            g.add(pg);
+        }
+
+        // piece 27: tree (trees_5)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(21, 0, 7);
+            pg.rotation.y = 0.000000;
+            const geo0 = new THREE.CylinderGeometry(0.10403685224351086, 0.14862407463358696, 0.9943071937452017, 16);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x4a3218, roughness: 0.9, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.49715359687260086, 0.0);
+            mesh0.rotation.set(0.087266, 0.000000, -0.087266);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            const geo1 = new THREE.CylinderGeometry(0, 0.5385162075458293, 1.10847470678337, 16);
+            const mat1 = new THREE.MeshStandardMaterial({ color: 0x2a5022, roughness: 0.85, metalness: 0.0 });
+            const mesh1 = new THREE.Mesh(geo1, mat1);
+            mesh1.position.set(0.07, 1.5233872056226416, -0.07);
+            mesh1.rotation.set(0.052360, 0.094126, -0.052360);
+            mesh1.castShadow = true;
+            mesh1.receiveShadow = true;
+            pg.add(mesh1);
+            g.add(pg);
+        }
+
+        // piece 28: crate (clutter_0)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(26, 0, 12);
+            pg.rotation.y = 0.000000;
+            const geo0 = new THREE.BoxGeometry(0.5059659261168488, 0.316371002159154, 0.3950373677818438);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x6e4f2c, roughness: 0.8, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.158185501079577, 0.0);
+            mesh0.rotation.set(0.000000, 0.302449, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            const geo1 = new THREE.BoxGeometry(0.5259659261168488, 0.03, 0.04);
+            const mat1 = new THREE.MeshStandardMaterial({ color: 0x3a2a10, roughness: 0.85, metalness: 0.0 });
+            const mesh1 = new THREE.Mesh(geo1, mat1);
+            mesh1.position.set(0.0, 0.331371002159154, 0.0);
+            mesh1.rotation.set(0.000000, 0.302449, 0.000000);
+            mesh1.castShadow = true;
+            mesh1.receiveShadow = true;
+            pg.add(mesh1);
+            g.add(pg);
+        }
+
+        // piece 29: crate (clutter_1)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(2, 0, 15);
+            pg.rotation.y = 0.000000;
+            const geo0 = new THREE.BoxGeometry(0.49588905788784354, 0.3575875529780373, 0.4970262271238873);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x71512d, roughness: 0.8, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.17879377648901865, 0.0);
+            mesh0.rotation.set(0.000000, 0.072122, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            const geo1 = new THREE.BoxGeometry(0.5158890578878436, 0.03, 0.04);
+            const mat1 = new THREE.MeshStandardMaterial({ color: 0x3a2a10, roughness: 0.85, metalness: 0.0 });
+            const mesh1 = new THREE.Mesh(geo1, mat1);
+            mesh1.position.set(0.0, 0.3725875529780373, 0.0);
+            mesh1.rotation.set(0.000000, 0.072122, 0.000000);
+            mesh1.castShadow = true;
+            mesh1.receiveShadow = true;
+            pg.add(mesh1);
+            g.add(pg);
+        }
+
+        // piece 30: crate (clutter_2)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(15, 0, 25);
+            pg.rotation.y = 0.000000;
+            const geo0 = new THREE.BoxGeometry(0.38299242072871464, 0.3684111612319716, 0.4899905318270956);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x825d34, roughness: 0.8, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.1842055806159858, 0.0);
+            mesh0.rotation.set(0.000000, 0.257601, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            const geo1 = new THREE.BoxGeometry(0.40299242072871466, 0.03, 0.04);
+            const mat1 = new THREE.MeshStandardMaterial({ color: 0x3a2a10, roughness: 0.85, metalness: 0.0 });
+            const mesh1 = new THREE.Mesh(geo1, mat1);
+            mesh1.position.set(0.0, 0.3834111612319716, 0.0);
+            mesh1.rotation.set(0.000000, 0.257601, 0.000000);
+            mesh1.castShadow = true;
+            mesh1.receiveShadow = true;
+            pg.add(mesh1);
+            g.add(pg);
+        }
+
+        // piece 31: crate (clutter_3)
+        {
+            const pg = new THREE.Group();
+            pg.position.set(4, 0, 4);
+            pg.rotation.y = 0.000000;
+            const geo0 = new THREE.BoxGeometry(0.48364317130687906, 0.4529141732425626, 0.4359538910416076);
+            const mat0 = new THREE.MeshStandardMaterial({ color: 0x6e4f2c, roughness: 0.8, metalness: 0.0 });
+            const mesh0 = new THREE.Mesh(geo0, mat0);
+            mesh0.position.set(0.0, 0.2264570866212813, 0.0);
+            mesh0.rotation.set(0.000000, 0.534799, 0.000000);
+            mesh0.castShadow = true;
+            mesh0.receiveShadow = true;
+            pg.add(mesh0);
+            const geo1 = new THREE.BoxGeometry(0.5036431713068791, 0.03, 0.04);
+            const mat1 = new THREE.MeshStandardMaterial({ color: 0x3a2a10, roughness: 0.85, metalness: 0.0 });
+            const mesh1 = new THREE.Mesh(geo1, mat1);
+            mesh1.position.set(0.0, 0.4679141732425626, 0.0);
+            mesh1.rotation.set(0.000000, 0.534799, 0.000000);
+            mesh1.castShadow = true;
+            mesh1.receiveShadow = true;
+            pg.add(mesh1);
+            g.add(pg);
+        }
+
+        scene.add(g);
+        return g;
+    }
+
+    // ══════════════════════════════════════════════════════════
+    //  SCENE SETUP (usually no need to edit below)
+    // ══════════════════════════════════════════════════════════
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#1a1a2e');
+    scene.fog = new THREE.Fog('#1a1a2e', 80, 200);
+
+    const camera = new THREE.PerspectiveCamera(
+        50, window.innerWidth / window.innerHeight, 0.1, 500
+    );
+    camera.position.set(16.806451612903224, 13.325806451612902, 34.33870967741935);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.appendChild(renderer.domElement);
+
+    // Lighting
+    const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambient);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(15, 25, 20);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(1024, 1024);
+    dirLight.shadow.camera.near = 0.5;
+    dirLight.shadow.camera.far = 80;
+    dirLight.shadow.camera.left = -20;
+    dirLight.shadow.camera.right = 20;
+    dirLight.shadow.camera.top = 20;
+    dirLight.shadow.camera.bottom = -20;
+    scene.add(dirLight);
+
+    const fillLight = new THREE.DirectionalLight(0x8899bb, 0.3);
+    fillLight.position.set(-10, 8, -10);
+    scene.add(fillLight);
+
+        const gridHelper = new THREE.GridHelper(40, 40, 0x444444, 0x222222);
+        scene.add(gridHelper);
+
+
+    // Build
+    const model = buildModel(scene);
+
+    // Controls (real OrbitControls with touch, keyboard, damping)
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.set(16.8, 0.0, 12.1);
+
+    // Render loop
+    function animate() {
+        requestAnimationFrame(animate);
+        if (window._walkMode) { window._walkUpdate(); } else { controls.update(); }
+        renderer.render(scene, camera);
+    }
+    animate();
+
+    // ── Walk Mode ──────────────────────────────────────
+    (function() {
+        let walkMode = false;
+        let wk = { x: 0, y: 1.6, z: 0, rotY: 0, rotX: 0 };
+        const keys = {};
+        const SPEED = 0.1;
+
+        // UI
+        const btn = document.createElement('div');
+        btn.innerHTML = '🚶 Walk [F]';
+        btn.style.cssText = 'position:fixed;bottom:14px;right:14px;color:#fff;background:rgba(0,0,0,0.7);padding:8px 14px;border-radius:6px;cursor:pointer;font:13px/1 monospace;z-index:100;border:1px solid #555;user-select:none;';
+        document.body.appendChild(btn);
+
+        const hud = document.createElement('div');
+        hud.style.cssText = 'position:fixed;bottom:14px;left:50%;transform:translateX(-50%);color:#aaa;background:rgba(0,0,0,0.6);padding:6px 14px;border-radius:6px;font:11px/1.3 monospace;z-index:100;display:none;white-space:nowrap;';
+        document.body.appendChild(hud);
+
+        function toggle() {
+            walkMode = !walkMode;
+            window._walkMode = walkMode;
+            btn.innerHTML = walkMode ? '🔭 Orbit [F]' : '🚶 Walk [F]';
+            btn.style.borderColor = walkMode ? '#4a4' : '#555';
+            hud.style.display = walkMode ? 'block' : 'none';
+            if (walkMode) {
+                wk = { x: camera.position.x, y: 1.6, z: camera.position.z, rotY: 0, rotX: 0 };
+                controls.enabled = false;
+                renderer.domElement.requestPointerLock();
+            } else {
+                controls.enabled = true;
+                document.exitPointerLock();
+                camera.position.set(16.806451612903224, 13.325806451612902, 34.33870967741935);
+                controls.target.set(16.8, 0.0, 12.1);
+            }
+        }
+
+        btn.onclick = toggle;
+        document.addEventListener('keydown', e => {
+            keys[e.key.toLowerCase()] = true;
+            if (e.key.toLowerCase() === 'f' && e.target === document.body) toggle();
+            if (e.key === 'Escape' && walkMode) toggle();
+        });
+        document.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+        // Mouse look
+        document.addEventListener('mousemove', e => {
+            if (!walkMode || !document.pointerLockElement) return;
+            wk.rotY -= e.movementX * 0.002;
+            wk.rotX = Math.max(-1.4, Math.min(1.4, wk.rotX - e.movementY * 0.002));
+        });
+
+        // Re-lock on click
+        renderer.domElement.addEventListener('click', () => {
+            if (walkMode && !document.pointerLockElement) renderer.domElement.requestPointerLock();
+        });
+
+        // Q/E rotation (keyboard look without mouse)
+        // Arrow keys + WASD movement
+
+        window._walkUpdate = function() {
+            const fwd = { x: Math.sin(wk.rotY), z: Math.cos(wk.rotY) };
+            const rgt = { x: Math.cos(wk.rotY), z: -Math.sin(wk.rotY) };
+
+            if (keys['w'] || keys['arrowup'])    { wk.x += fwd.x*SPEED; wk.z += fwd.z*SPEED; }
+            if (keys['s'] || keys['arrowdown'])  { wk.x -= fwd.x*SPEED; wk.z -= fwd.z*SPEED; }
+            if (keys['a'] || keys['arrowleft'])  { wk.x -= rgt.x*SPEED; wk.z -= rgt.z*SPEED; }
+            if (keys['d'] || keys['arrowright']) { wk.x += rgt.x*SPEED; wk.z += rgt.z*SPEED; }
+            if (keys['q']) wk.rotY += 0.03;
+            if (keys['e']) wk.rotY -= 0.03;
+            if (keys['r']) wk.rotX = Math.min(1.4, wk.rotX + 0.02);
+            if (keys['t']) wk.rotX = Math.max(-1.4, wk.rotX - 0.02);
+
+            camera.position.set(wk.x, wk.y, wk.z);
+            camera.lookAt(
+                wk.x + Math.sin(wk.rotY) * 10,
+                wk.y + Math.sin(wk.rotX) * 10,
+                wk.z + Math.cos(wk.rotY) * 10
+            );
+
+            const deg = ((wk.rotY * 180 / Math.PI) % 360 + 360) % 360;
+            const dir = ['N','NE','E','SE','S','SW','W','NW'][Math.round(deg/45)%8];
+            hud.innerHTML = 'pos: ('+wk.x.toFixed(1)+', '+wk.z.toFixed(1)+') '+
+                ' facing: '+dir+
+                ' &nbsp;│&nbsp; WASD: move &nbsp; Mouse/QE: look &nbsp; F: orbit &nbsp; Esc: exit';
+        };
+
+        window._walkMode = false;
+    })();
+
+    // Resize
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+</script>
+</body>
+</html>
