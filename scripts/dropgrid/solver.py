@@ -210,7 +210,7 @@ def solve_compiled(spec, seed=42, debug=False):
     anchor_type = spec['anchor']['type']
     anchor_label = spec['anchor']['label']
     next_id = 1
-    ax, az = (14, 12)
+    ax, az = (GW // 2, GD // 2)
     next_id, anchor = place_piece(pieces, occ, next_id, anchor_type, anchor_label, ax, az, 0)
     ma = make_ma((ax, az), _ma_radius(spec))
 
