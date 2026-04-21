@@ -4,8 +4,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
 
-from scripts.dropgrid.layout_normalizer import parse_layout_dsl, normalize_objects, LayoutSpecError
-from scripts.dropgrid.layout_compiler import compile_layout_dsl
+from scripts.dropgrid.topology_candidate.layout_normalizer import parse_layout_dsl, normalize_objects, LayoutSpecError
+from scripts.dropgrid.topology_candidate.layout_compiler import compile_layout_dsl
 
 
 def test_attach_defaults_count_and_mode():
