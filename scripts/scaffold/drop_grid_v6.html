@@ -1,0 +1,1375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>🧬 Drop Grid v6 — Natural Spacing</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#111;color:#ddd;font-family:'Courier New',monospace;display:flex;overflow:hidden}
+#L{width:420px;min-width:420px;height:100vh;overflow-y:auto;background:#0d0d1a;border-right:1px solid #2a2a3a;padding:12px;scrollbar-width:thin;scrollbar-color:#333 #111}
+#R{flex:1;position:relative}
+h1{font-size:15px;color:#f0c674;margin-bottom:2px;letter-spacing:1px}
+.sub{font-size:10px;color:#555;margin-bottom:12px}
+h2{font-size:9px;color:#b294bb;margin:14px 0 4px;text-transform:uppercase;letter-spacing:2px}
+textarea{width:100%;background:#0a0a14;border:1px solid #2a2a3a;color:#b5bd68;font-family:inherit;font-size:11px;padding:8px;resize:vertical;line-height:1.6;border-radius:3px}
+textarea:focus{outline:none;border-color:#f0c674}
+.btns{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.btn{background:#1a1a2e;border:1px solid #3a3a5a;color:#81a2be;padding:5px 12px;cursor:pointer;font-family:inherit;font-size:10px;border-radius:3px;transition:all .15s}
+.btn:hover{background:#2a2a4e;border-color:#81a2be}
+.btn-go{background:#1a2e1a;border-color:#b5bd68;color:#b5bd68;font-size:11px;padding:6px 16px}
+.ex{background:none;border:1px solid #2a2a3a;color:#666;padding:2px 8px;cursor:pointer;font-family:inherit;font-size:10px;border-radius:2px}
+.ex:hover{color:#b294bb;border-color:#b294bb}
+#log{padding:6px;background:rgba(0,0,0,0.5);font-size:9px;max-height:170px;overflow-y:auto;line-height:1.6;border:1px solid #1a1a2a;border-radius:3px;margin-top:4px}
+.le{color:#b294bb}.ld{color:#b5bd68}.lm{color:#81a2be}.lw{color:#cc6666}.lc{color:#8abeb7}.lt{color:#555}.lk{color:#f0c674}
+.st{display:flex;justify-content:space-between;font-size:11px;padding:2px 0}
+.sk{color:#555}.sv{color:#81a2be}
+.pin{padding:3px 6px;margin:1px 0;display:flex;justify-content:space-between;font-size:10px;border-left:3px solid #2a2a3a}
+.pin-ok{border-color:#b5bd68;background:rgba(181,189,104,0.05)}
+.pin-skip{border-color:#cc6666;opacity:0.4;text-decoration:line-through}
+</style>
+</head>
+<body>
+<div id="L">
+  <h1>🧬 DROP GRID v6</h1>
+  <div class="sub">30×30 Grid · Rotated Clusters · Organic Jitter · Cross-Type Repulsion</div>
+  <h2>Scene</h2>
+  <textarea id="inp" rows="18" spellcheck="false"></textarea>
+  <div class="btns">
+    <button class="btn btn-go" id="bGo">Drop</button>
+    <button class="btn" id="bSeed">New Seed</button>
+    <button class="btn" id="bClr">Clear</button>
+  </div>
+  <h2>Scenes</h2>
+  <div class="btns" id="exBtns"></div>
+  <h2>Drop Order</h2>
+  <div id="pins"></div>
+  <h2>Stats</h2>
+  <div id="stats"></div>
+  <h2>Log</h2>
+  <div id="log"></div>
+</div>
+<div id="R"><canvas id="cv"></canvas></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════
+// RNG + CONSTANTS
+// ═══════════════════════════════════════════════════
+function mkRng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+let S=42,R=mkRng(42);
+const PHI=(1+Math.sqrt(5))/2;
+const GOLDEN_ANGLE=2*Math.PI*(1-1/PHI);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+// ═══════════════════════════════════════════════════
+// GRID
+// ═══════════════════════════════════════════════════
+const GW=30,GD=30,GH=10;
+let grid,maGrid;
+function initGrid(){grid=new Int16Array(GW*GD*GH).fill(0);maGrid=new Uint8Array(GW*GD).fill(0)}
+function gIdx(x,y,z){return(y*GD+z)*GW+x}
+function gGet(x,y,z){if(x<0||x>=GW||y<0||y>=GH||z<0||z>=GD)return-1;return grid[gIdx(x,y,z)]}
+function gSet(x,y,z,v){if(x>=0&&x<GW&&y>=0&&y<GH&&z>=0&&z<GD)grid[gIdx(x,y,z)]=v}
+function gOcc(x,y,z){return gGet(x,y,z)!==0&&gGet(x,y,z)!==-1}
+function isMa(x,z){if(x<0||x>=GW||z<0||z>=GD)return false;return maGrid[z*GW+x]===1}
+
+// ═══════════════════════════════════════════════════
+// SHAPE GENERATORS — ring shapes as slot wheels
+// ═══════════════════════════════════════════════════
+const SHAPES={
+  circle(cx,cz,r,n){
+    const slots=[];
+    for(let i=0;i<n;i++){const a=GOLDEN_ANGLE*i;slots.push({x:cx+Math.cos(a)*r,z:cz+Math.sin(a)*r,a})}
+    return slots;
+  },
+  square(cx,cz,r,n){
+    const slots=[],perim=r*8; // total perimeter of square
+    for(let i=0;i<n;i++){
+      const t=(GOLDEN_ANGLE*i/(Math.PI*2))%1;
+      const d=t*perim;
+      let x,z;
+      if(d<r*2){x=cx-r+d;z=cz-r}
+      else if(d<r*4){x=cx+r;z=cz-r+(d-r*2)}
+      else if(d<r*6){x=cx+r-(d-r*4);z=cz+r}
+      else{x=cx-r;z=cz+r-(d-r*6)}
+      const a=Math.atan2(z-cz,x-cx);
+      slots.push({x,z,a});
+    }
+    return slots;
+  },
+  rectangle(cx,cz,w,h,n){
+    const slots=[],perim=2*(w+h);
+    for(let i=0;i<n;i++){
+      const t=(GOLDEN_ANGLE*i/(Math.PI*2))%1;
+      const d=t*perim;
+      let x,z;
+      if(d<w){x=cx-w/2+d;z=cz-h/2}
+      else if(d<w+h){x=cx+w/2;z=cz-h/2+(d-w)}
+      else if(d<w*2+h){x=cx+w/2-(d-w-h);z=cz+h/2}
+      else{x=cx-w/2;z=cz+h/2-(d-w*2-h)}
+      const a=Math.atan2(z-cz,x-cx);
+      slots.push({x,z,a});
+    }
+    return slots;
+  },
+  line(sx,sz,ex,ez,n){
+    const slots=[];
+    for(let i=0;i<n;i++){
+      const t=n>1?i/(n-1):0.5;
+      slots.push({x:sx+t*(ex-sx),z:sz+t*(ez-sz),a:Math.atan2(ez-sz,ex-sx)});
+    }
+    return slots;
+  },
+  grid2d(cx,cz,w,h,cols,rows){
+    const slots=[];
+    for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+      slots.push({x:cx-w/2+c*(w/(cols-1||1)),z:cz-h/2+r*(h/(rows-1||1)),a:0});
+    }
+    return slots;
+  },
+
+  // ── PROCEDURAL PATHS ──────────────────────────────
+
+  // Wander: drunk walk from start to end with wobble
+  wander(sx,sz,ex,ez,n,wobble,rng){
+    const slots=[];
+    const dx=ex-sx,dz=ez-sz;
+    const dist=Math.sqrt(dx*dx+dz*dz)||1;
+    let dir=Math.atan2(dz,dx);
+    const stepSize=dist/Math.max(n-1,1);
+    let x=sx,z=sz;
+    for(let i=0;i<n;i++){
+      slots.push({x,z,a:dir});
+      if(i<n-1){
+        // Blend: wobble randomly but pull back toward end point
+        const toEnd=Math.atan2(ez-z,ex-x);
+        dir=dir*0.6+toEnd*0.4+(rng()-0.5)*wobble;
+        x+=Math.cos(dir)*stepSize;
+        z+=Math.sin(dir)*stepSize;
+      }
+    }
+    return slots;
+  },
+
+  // Follow: trace an already-placed group's positions with offset
+  follow(placedPositions,offset,side,n){
+    const slots=[];
+    if(!placedPositions.length)return slots;
+    // Resample the path to n points
+    const src=placedPositions;
+    for(let i=0;i<n;i++){
+      const t=src.length>1?i/(n-1)*(src.length-1):0;
+      const idx=Math.floor(t),frac=t-idx;
+      const p0=src[Math.min(idx,src.length-1)];
+      const p1=src[Math.min(idx+1,src.length-1)];
+      const px=p0.x+(p1.x-p0.x)*frac;
+      const pz=p0.z+(p1.z-p0.z)*frac;
+      // Direction along the path at this point
+      const dir=Math.atan2(p1.z-p0.z,p1.x-p0.x);
+      // Offset perpendicular to path direction
+      const perpDir=dir+Math.PI/2*side; // side: +1=left, -1=right
+      const ox=Math.cos(perpDir)*offset;
+      const oz=Math.sin(perpDir)*offset;
+      slots.push({x:px+ox,z:pz+oz,a:dir});
+    }
+    return slots;
+  },
+
+  // Branch: N arms radiating from center, each a mini-wander
+  branch(cx,cz,n,arms,armLen,wobble,rng){
+    const slots=[];
+    const perArm=Math.ceil(n/arms);
+    for(let a=0;a<arms;a++){
+      const baseAngle=(a/arms)*Math.PI*2+rng()*0.3; // slight random offset per arm
+      let x=cx,z=cz,dir=baseAngle;
+      const stepSize=armLen/Math.max(perArm-1,1);
+      for(let i=0;i<perArm&&slots.length<n;i++){
+        slots.push({x,z,a:dir});
+        dir+=( rng()-0.5)*wobble;
+        x+=Math.cos(dir)*stepSize;
+        z+=Math.sin(dir)*stepSize;
+      }
+    }
+    return slots;
+  }
+};
+
+// ═══════════════════════════════════════════════════
+// MAGNET SYSTEM — orientation from attraction/repulsion
+// ═══════════════════════════════════════════════════
+// Each piece type declares magnet poles:
+//   face: TOWARD(role) or AWAY(role) — front of object points at/away from target
+//   side: TOWARD(role) — side of object points toward nearest same-role neighbor
+const MAGNETS={
+  gravestone: {face:{dir:'AWAY',target:'crypt',fallback:'center'}},
+  iron_fence: {face:{dir:'TANGENT',target:'_center'}, side:{dir:'TOWARD',target:'iron_fence'}},
+  lantern:    {face:{dir:'TOWARD',target:'_center'}},
+  dead_tree:  {},
+  house:      {face:{dir:'TOWARD',target:'well',fallback:'_center'}},
+  stall:      {face:{dir:'TOWARD',target:'well',fallback:'_center'}},
+  tent:       {face:{dir:'TOWARD',target:'campfire',fallback:'_center'}},
+  fence:      {face:{dir:'TANGENT',target:'_center'}, side:{dir:'TOWARD',target:'fence'}},
+  wall:       {face:{dir:'TANGENT',target:'tower',fallback:'_center'}},
+  column:     {},
+  tree:       {},
+  rubble:     {},
+  crypt:      {},
+  road:       {},
+  tower:      {},
+  well:       {},
+  platform:   {},
+  campfire:   {},
+  barn:       {},
+};
+
+function solveMagnets(placed, log){
+  let aligned=0;
+  const centerX=Math.floor(GW/2), centerZ=Math.floor(GD/2)-2;
+
+  for(const p of placed){
+    if(!p.placed||p.trimmed)continue;
+    const mag=MAGNETS[p.type];
+    if(!mag||!mag.face)continue;
+
+    const face=mag.face;
+    let tx,tz;
+
+    if(face.target==='_center'){
+      tx=centerX;tz=centerZ;
+    } else {
+      // Find nearest target
+      const target=placed.find(q=>q.placed&&!q.trimmed&&q.type===face.target);
+      if(target){tx=target.gx;tz=target.gz}
+      else if(face.fallback==='_center'){tx=centerX;tz=centerZ}
+      else continue;
+    }
+
+    // Compute angle to target
+    let angle=Math.atan2(tz-p.gz,tx-p.gx);
+    if(face.dir==='AWAY') angle+=Math.PI;
+    if(face.dir==='TANGENT') angle+=Math.PI/2;
+    if(face.dir==='COUNTER_TANGENT') angle-=Math.PI/2;
+
+    // Snap to 4 or 8 directions for grid alignment
+    const snap8=Math.round(angle/(Math.PI/4))*(Math.PI/4);
+    p.rot=snap8;
+    aligned++;
+  }
+
+  // Side magnets — align crossbars to nearest same-role neighbor
+  for(const p of placed){
+    if(!p.placed||p.trimmed)continue;
+    const mag=MAGNETS[p.type];
+    if(!mag||!mag.side)continue;
+
+    const sameRole=placed.filter(q=>q!==p&&q.placed&&!q.trimmed&&q.role===p.role);
+    if(!sameRole.length)continue;
+
+    // Find nearest same-role
+    let nearest=null,nd=Infinity;
+    for(const q of sameRole){
+      const d=Math.sqrt((p.gx-q.gx)**2+(p.gz-q.gz)**2);
+      if(d<nd){nd=d;nearest=q}
+    }
+    if(nearest){
+      // Side points toward nearest neighbor
+      p.sideAngle=Math.atan2(nearest.gz-p.gz,nearest.gx-p.gx);
+    }
+  }
+
+  if(aligned>0) log.push({m:`MAGNETS: ${aligned} objects aligned`,c:'lk'});
+  return aligned;
+}
+
+// ═══════════════════════════════════════════════════
+// PIECES (same as v1 but with type info for magnets)
+// ═══════════════════════════════════════════════════
+const PIECES={
+  tower:{cells(r){const c=[];const h=4+Math.floor(r()*2);for(let y=0;y<h;y++)for(let dx=0;dx<2;dx++)for(let dz=0;dz<2;dz++)c.push([dx,y,dz]);return c},mass:Infinity},
+  wall:{cells(r){const c=[];const w=3+Math.floor(r()*2),h=2+Math.floor(r()*2);for(let y=0;y<h;y++)for(let dx=0;dx<w;dx++)c.push([dx,y,0]);return c},mass:1},
+  house:{cells(r){const c=[];for(let y=0;y<3;y++)for(let dx=0;dx<2;dx++)for(let dz=0;dz<2;dz++)c.push([dx,y,dz]);return c},mass:1},
+  stall:{cells(){const c=[];for(let dx=0;dx<3;dx++)c.push([dx,0,0],[dx,0,1]);c.push([0,1,0],[2,1,0]);for(let dx=0;dx<3;dx++)c.push([dx,2,0],[dx,2,1]);return c},mass:1},
+  fence:{cells(){return[[0,0,0],[0,1,0]]},mass:0.5},
+  tree:{cells(){return[[0,0,0],[0,1,0],[0,2,0],[0,3,0]]},mass:0.3},
+  rubble:{cells(){return[[0,0,0]]},mass:0.1},
+  well:{cells(){return[[0,0,0],[1,0,0],[0,0,1],[1,0,1],[0,1,0],[1,1,0],[0,1,1],[1,1,1]]},mass:2},
+  platform:{cells(r){const w=4+Math.floor(r()*2),c=[];for(let dx=0;dx<w;dx++)for(let dz=0;dz<w;dz++)c.push([dx,0,dz]);return c},mass:Infinity},
+  column:{cells(r){const h=3+Math.floor(r()*2);const c=[];for(let y=0;y<h;y++)c.push([0,y,0]);return c},mass:1},
+  crypt:{cells(){const c=[];for(let y=0;y<3;y++)for(let dx=0;dx<3;dx++)for(let dz=0;dz<3;dz++)c.push([dx,y,dz]);return c},mass:Infinity},
+  gravestone:{cells(){return[[0,0,0],[0,1,0]]},mass:0.5},
+  iron_fence:{cells(){return[[0,0,0],[0,1,0],[0,2,0]]},mass:0.5},
+  dead_tree:{cells(r){const c=[];for(let y=0;y<4;y++)c.push([0,y,0]);c.push([1,3,0]);return c},mass:0.3},
+  lantern:{cells(){return[[0,0,0],[0,1,0]]},mass:0.2},
+  campfire:{cells(){return[[0,0,0]]},mass:0.3},
+  tent:{cells(){const c=[];for(let dx=0;dx<2;dx++)for(let dz=0;dz<3;dz++)c.push([dx,0,dz]);c.push([0,1,0],[1,1,0],[0,1,1],[1,1,1]);return c},mass:1},
+  log:{cells(){return[[0,0,0],[1,0,0]]},mass:0.3},
+  barrel:{cells(){return[[0,0,0],[0,1,0]]},mass:0.5},
+  barn:{cells(){const c=[];for(let y=0;y<3;y++)for(let dx=0;dx<4;dx++)for(let dz=0;dz<3;dz++)c.push([dx,y,dz]);for(let dx=1;dx<3;dx++)for(let dz=0;dz<3;dz++)c.push([dx,3,dz]);return c},mass:Infinity},
+  hay:{cells(){return[[0,0,0],[1,0,0],[0,0,1],[1,0,1]]},mass:0.5},
+  silo:{cells(){const c=[];for(let y=0;y<5;y++)c.push([0,y,0]);return c},mass:2},
+  road:{cells(){return[[0,0,0]]},mass:0.1},
+};
+
+// ═══════════════════════════════════════════════════
+// PARSER
+// ═══════════════════════════════════════════════════
+function parse(text){
+  const scene={seed:42,pieces:[],ma:[],hasWater:/dock|water|shore|harbor/i.test(text)};
+  for(let raw of text.split('\n')){
+    let line=raw.trim();if(!line||line.startsWith('#'))continue;
+    const sm=line.match(/seed[=:](\d+)/i);if(sm){scene.seed=parseInt(sm[1]);continue}
+    if(/^ma[:\s]/i.test(line)){scene.ma.push(line.replace(/^ma[:\s]+/i,'').trim());continue}
+    if(/^theme/i.test(line))continue;
+
+    const m=line.match(/^(\w+):\s*(.+)/i);if(!m)continue;
+    const role=m[1].toLowerCase(),desc=m[2];
+    let count=1;
+    const cm=desc.match(/x(\d+)/i);if(cm)count=parseInt(cm[1]);
+    const crm=desc.match(/count[=:]?(\d+)/i);if(crm)count=parseInt(crm[1]);
+
+    // Emitter + shape
+    let emitter='scatter',emitParams={};
+
+    // Shape ring: "circle|square|rect X at N" or legacy "ring X at N"
+    const shapeM=desc.match(/(?:ring|circle|square|rect(?:angle)?)\s+(?:around\s+)?(\w+)\s+(?:at\s+)?(\d+)(?:\s+(\d+))?/i);
+    if(shapeM){
+      emitter='shape';
+      const shapeWord=(desc.match(/(ring|circle|square|rect(?:angle)?)/i)||['','circle'])[1].toLowerCase();
+      emitParams.shape=shapeWord==='square'?'square':shapeWord.startsWith('rect')?'rectangle':'circle';
+      if(shapeWord==='ring')emitParams.shape='circle';
+      emitParams.target=shapeM[1].toLowerCase();
+      emitParams.radius=parseInt(shapeM[2]);
+      if(shapeM[3])emitParams.radius2=parseInt(shapeM[3]); // height for rectangle
+    }
+
+    // Line
+    const lineM=desc.match(/(?:line|row)\s+(?:toward\s+)?(\w+)?\s*(?:spacing[=:]?(\d+))?/i);
+    if(lineM&&!shapeM){emitter='line';emitParams.toward=lineM[1]?.toLowerCase();emitParams.spacing=lineM[2]?parseInt(lineM[2]):2}
+
+    // Wander: "wander from X to Y" or "wander from X"
+    const wanderM=desc.match(/wander\s+(?:from\s+)?(\w+)\s+(?:to\s+)?(\w+)?/i);
+    if(wanderM&&!shapeM){
+      emitter='wander';
+      emitParams.from=wanderM[1].toLowerCase();
+      emitParams.to=wanderM[2]?wanderM[2].toLowerCase():null;
+      const wobbleM=desc.match(/wobble[=:]?([\d.]+)/i);
+      emitParams.wobble=wobbleM?parseFloat(wobbleM[1]):0.5;
+    }
+
+    // Follow: "follow X" with optional offset and side
+    const followM=desc.match(/follow\s+(\w+)/i);
+    if(followM&&!shapeM&&!wanderM){
+      emitter='follow';
+      emitParams.followTarget=followM[1].toLowerCase();
+      const offsetM=desc.match(/offset[=:]?([\d.]+)/i);
+      emitParams.offset=offsetM?parseFloat(offsetM[1]):2;
+      emitParams.side=/right|east/i.test(desc)?-1:/left|west/i.test(desc)?1:0; // 0=alternate (default)
+    }
+
+    // Branch: "branch from X"
+    const branchM=desc.match(/branch\s+(?:from\s+)?(\w+)/i);
+    if(branchM&&!shapeM&&!wanderM&&!followM){
+      emitter='branch';
+      emitParams.from=branchM[1].toLowerCase();
+      const armsM=desc.match(/arms[=:]?(\d+)/i);
+      emitParams.arms=armsM?parseInt(armsM[1]):4;
+      const armLenM=desc.match(/(?:length|len|armlen)[=:]?(\d+)/i);
+      emitParams.armLen=armLenM?parseInt(armLenM[1]):5;
+      const wobbleM=desc.match(/wobble[=:]?([\d.]+)/i);
+      emitParams.wobble=wobbleM?parseFloat(wobbleM[1]):0.4;
+    }
+
+    // Three-dial params (apply to ALL emitters)
+    const clustersM=desc.match(/(?:slots|clusters)[=:]?(\d+)/i);
+    if(clustersM)emitParams.clusters=parseInt(clustersM[1]);
+    const spreadM=desc.match(/spread[=:]?(\d+(?:\.\d+)?)/i);
+    if(spreadM)emitParams.spread=parseFloat(spreadM[1]);
+    // Arc restriction
+    const arcM=desc.match(/arc[=:]?([\d.]+)/i);
+    if(arcM)emitParams.arc=parseFloat(arcM[1]);
+
+    // Flags
+    const central=/center|central/i.test(desc);
+    const edges=/edge/i.test(desc);
+    const scattered=/scatter/i.test(desc);
+
+    // Map role to piece type
+    let type=role;
+    const MAP={walls:'wall',fortress_wall:'wall',houses:'house',stalls:'stall',trees:'tree',columns:'column',colonnade:'column',fences:'fence',gravestones:'gravestone',dead_trees:'dead_tree',iron_fences:'iron_fence',lanterns:'lantern',barrels:'barrel',logs:'log',tents:'tent',hays:'hay',haystacks:'hay',roads:'road',road:'road',paths:'road',cobbles:'road',trail:'road',stepping_stones:'road'};
+    if(MAP[role])type=MAP[role];
+    if(!PIECES[type])continue;
+
+    // Pressure
+    let pressure=5;
+    if(central)pressure+=6;if(PIECES[type].mass===Infinity)pressure+=5;
+    if(/tall/i.test(desc))pressure+=3;if(emitter==='shape')pressure+=2;
+    if(emitter==='wander')pressure+=4; // paths drop early, above trim threshold
+    if(emitter==='follow')pressure-=1; // followers drop after what they follow
+    if(emitter==='branch')pressure+=3;
+    if(scattered||edges)pressure-=3;
+    if(type==='rubble'&&emitter!=='wander'&&emitter!=='branch')pressure-=2;
+    if((type==='tree'||type==='dead_tree')&&emitter!=='follow')pressure-=2;
+
+    // Map role to piece type (already done above, but add road aliases)
+    const numClusters=emitParams.clusters||count;
+    for(let i=0;i<count;i++){
+      scene.pieces.push({
+        id:scene.pieces.length+1,type,role,label:count>1?`${role}_${i}`:role,
+        emitter,emitParams,pressure,central,edges,scattered,
+        sibIdx:i,sibTotal:count,
+        slotGroup:i%numClusters, indexInSlot:Math.floor(i/numClusters),
+        placed:false,trimmed:false,gx:0,gy:0,gz:0,rot:0,sideAngle:0,cells:[]
+      });
+    }
+  }
+  scene.pieces.sort((a,b)=>b.pressure-a.pressure);
+  return scene;
+}
+
+// ═══════════════════════════════════════════════════
+// GRID OPS
+// ═══════════════════════════════════════════════════
+function rotateCells(cells,rot){if(rot===0)return cells;return cells.map(([x,y,z])=>{switch(rot%4){case 1:return[z,y,-x];case 2:return[-x,y,-z];case 3:return[-z,y,x];default:return[x,y,z]}})}
+function normalizeCells(cells){let mx=Infinity,mz=Infinity;for(const[x,,z]of cells){mx=Math.min(mx,x);mz=Math.min(mz,z)}return cells.map(([x,y,z])=>[x-mx,y,z-mz])}
+
+function pieceBounds(cells){
+  let maxX=0,maxZ=0,maxY=0;
+  for(const[dx,dy,dz]of cells){maxX=Math.max(maxX,dx);maxZ=Math.max(maxZ,dz);maxY=Math.max(maxY,dy)}
+  return{maxX,maxZ,maxY};
+}
+
+function dropPiece(cells,gx,gz){
+  const base=cells.filter(([,dy])=>dy===0);
+  let maxY=0;for(const[,dy]of cells)maxY=Math.max(maxY,dy);
+  for(let y=GH-1-maxY;y>=0;y--){
+    let ok=true;
+    for(const[dx,dy,dz]of cells){
+      const wx=gx+dx,wy=y+dy,wz=gz+dz;
+      if(wx<0||wx>=GW||wy<0||wy>=GH||wz<0||wz>=GD){ok=false;break}
+      if(gOcc(wx,wy,wz)){ok=false;break}
+    }
+    if(!ok)continue;
+    // FIX 2: ALL base cells must be supported, not just any one
+    const sup=y===0||base.every(([dx,,dz])=>gOcc(gx+dx,y-1,gz+dz));
+    if(sup)return{y,cells,valid:true};
+  }
+  return{y:0,cells:[],valid:false};
+}
+
+function commitPiece(p,gx,gy,gz,rot,cells){
+  for(const[dx,dy,dz]of cells)gSet(gx+dx,gy+dy,gz+dz,p.id);
+  p.placed=true;p.gx=gx;p.gy=gy;p.gz=gz;p.rot=rot;
+  p.cells=cells.map(([dx,dy,dz])=>[gx+dx,gy+dy,gz+dz]);
+}
+
+function aimedBounce(gx,gz,tx,tz,bx,bz,bounds){
+  const ax=gx-bx,az=gz-bz,al=Math.sqrt(ax*ax+az*az)||1;
+  const ttx=tx-gx,ttz=tz-gz,tl=Math.sqrt(ttx*ttx+ttz*ttz)||1;
+  const bxx=ax/al*0.6+ttx/tl*0.4,bzz=az/al*0.6+ttz/tl*0.4;
+  const bl=Math.sqrt(bxx*bxx+bzz*bzz)||1;
+  const d=2+Math.floor(R()*2); // FIX 4: already using R(), confirmed
+  const mxX=bounds?GW-1-bounds.maxX:GW-1;
+  const mxZ=bounds?GD-1-bounds.maxZ:GD-1;
+  return{x:clamp(Math.round(gx+bxx/bl*d),0,mxX),z:clamp(Math.round(gz+bzz/bl*d),0,mxZ)};
+}
+
+// ═══════════════════════════════════════════════════
+// THREE-DIAL EMITTER — Distribution × Grouping × Spread
+// + Arc restriction + Shape-matching cluster fill
+// ═══════════════════════════════════════════════════
+
+// Cluster fill: shape matches parent distribution
+// Linear for square/line parents, spiral for circle
+function pocketOffset(slotId, indexInSlot, spread, parentShape, slotAngle){
+  if(spread<=0||indexInSlot===0)return{x:0,z:0};
+
+  // Linear fill for square/line/rectangle parents — runs along the edge
+  if(spread<=1&&(parentShape==='square'||parentShape==='line'||parentShape==='rectangle')){
+    const tang=slotAngle+Math.PI/2; // tangent to the ring at this slot
+    const t=indexInSlot-(indexInSlot>1?1:0); // offset along tangent
+    return{x:Math.round(Math.cos(tang)*t),z:Math.round(Math.sin(tang)*t)};
+  }
+
+  // Spiral fill for tight circular clusters — rotated by slot angle so each cluster radiates outward
+  if(spread<=1){
+    const spiral=[[0,0],[1,0],[0,1],[-1,0],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]];
+    const idx=Math.min(indexInSlot,spiral.length-1);
+    const sx=spiral[idx][0], sz=spiral[idx][1];
+    // Rotate by slot angle so clusters face outward from ring center
+    const cos=Math.cos(slotAngle), sin=Math.sin(slotAngle);
+    return{x:Math.round(sx*cos-sz*sin),z:Math.round(sx*sin+sz*cos)};
+  }
+
+  // Golden-angle disk for loose clusters
+  const a=GOLDEN_ANGLE*indexInSlot;
+  const r=spread*Math.sqrt((indexInSlot+0.5)/(indexInSlot+2));
+  return{x:Math.cos(a)*r,z:Math.sin(a)*r};
+}
+
+function emit(piece,placed,scene){
+  const cx=Math.floor(GW/2),cz=Math.floor(GD/2)-2;
+
+  if(piece.central){return{x:cx-1,z:cz-1,src:'center',slotCenter:null}}
+
+  if(piece.emitter==='shape'){
+    const target=placed.find(p=>p.role===piece.emitParams.target||p.type===piece.emitParams.target);
+    if(!target)return scatterEmit(piece);
+    const tcx=target.gx+1,tcz=target.gz+1;
+    const r=piece.emitParams.radius;
+    const shape=piece.emitParams.shape||'circle';
+    const numClusters=piece.emitParams.clusters||piece.sibTotal;
+    const spread=piece.emitParams.spread||0;
+    const arc=piece.emitParams.arc||1.0; // fraction of ring to fill (0-1)
+
+    // Dial 1: Generate cluster centers on the shape
+    // Arc restriction: only generate slots within the arc
+    let slots;
+    if(arc<1.0){
+      // Partial ring — generate only within arc span
+      const span=arc*Math.PI*2;
+      const a0=0; // could add arcPhase param later
+      const tempSlots=[];
+      for(let i=0;i<numClusters;i++){
+        const t=numClusters>1?i/(numClusters-1):0.5;
+        const a=a0+t*span;
+        tempSlots.push({x:tcx+Math.cos(a)*r,z:tcz+Math.sin(a)*r,a});
+      }
+      slots=tempSlots;
+    } else {
+      if(shape==='circle') slots=SHAPES.circle(tcx,tcz,r,numClusters);
+      else if(shape==='square') slots=SHAPES.square(tcx,tcz,r,numClusters);
+      else if(shape==='rectangle'){
+        const h=piece.emitParams.radius2||r;
+        slots=SHAPES.rectangle(tcx,tcz,r*2,h*2,numClusters);
+      }
+      else slots=SHAPES.circle(tcx,tcz,r,numClusters);
+    }
+
+    // Dial 2: Assign piece to its cluster
+    const clusterIdx=piece.slotGroup%slots.length;
+    const slot=slots[clusterIdx];
+    const slotAngle=slot.a||Math.atan2(slot.z-tcz,slot.x-tcx);
+
+    // Dial 3: Shape-matching pocket offset
+    const pOff=pocketOffset(clusterIdx,piece.indexInSlot,spread,shape,slotAngle);
+
+    const sx=clamp(Math.round(slot.x+pOff.x),0,GW-1);
+    const sz=clamp(Math.round(slot.z+pOff.z),0,GD-1);
+    return{x:sx,z:sz,src:`c${clusterIdx}/${shape}`,slotCenter:{x:Math.round(slot.x),z:Math.round(slot.z)}};
+  }
+
+  if(piece.emitter==='line'){
+    const sp=piece.emitParams.spacing||2;
+    const numClusters=piece.emitParams.clusters||piece.sibTotal;
+    const spread=piece.emitParams.spread||0;
+    let sx=cx-2,sz=2;
+    if(piece.emitParams.toward==='water')sz=8;
+    const clusterIdx=piece.slotGroup%numClusters;
+    const baseZ=sz+clusterIdx*sp;
+    const pOff=pocketOffset(clusterIdx,piece.indexInSlot,spread,'line',0);
+    return{x:clamp(Math.round(sx+pOff.x),0,GW-1),z:clamp(Math.round(baseZ+pOff.z),0,GD-1),src:'line',slotCenter:{x:sx,z:baseZ}};
+  }
+
+  // ── WANDER: drunk walk between two points ──────────
+  if(piece.emitter==='wander'){
+    const fromPiece=placed.find(p=>p.placed&&(p.role===piece.emitParams.from||p.type===piece.emitParams.from));
+    let sx=cx,sz=cz,ex=cx+8,ez=cz;
+    if(fromPiece){sx=fromPiece.gx+1;sz=fromPiece.gz+1}
+    // Offset start slightly so first piece doesn't land on the anchor
+    const startDir=piece.emitParams.to?null:Math.PI/2; // default south
+    if(piece.emitParams.to){
+      const toPiece=placed.find(p=>p.placed&&(p.role===piece.emitParams.to||p.type===piece.emitParams.to));
+      if(toPiece){ex=toPiece.gx+1;ez=toPiece.gz+1}
+      else if(piece.emitParams.to==='north'){ex=sx;ez=1}
+      else if(piece.emitParams.to==='south'){ex=sx;ez=GD-2}
+      else if(piece.emitParams.to==='east'){ex=GW-2;ez=sz}
+      else if(piece.emitParams.to==='west'){ex=1;ez=sz}
+      else{ex=cx+6;ez=cz}
+    }
+    // Nudge start 2 cells toward the destination so we clear the anchor
+    const toEx=Math.atan2(ez-sz,ex-sx);
+    sx+=Math.round(Math.cos(toEx)*2);sz+=Math.round(Math.sin(toEx)*2);
+    const numClusters=piece.emitParams.clusters||piece.sibTotal;
+    const spread=piece.emitParams.spread||0;
+    const wobble=piece.emitParams.wobble||0.5;
+    // Use a sub-RNG so wander path is consistent for all siblings
+    const wanderRng=mkRng(S+7777);
+    const slots=SHAPES.wander(sx,sz,ex,ez,numClusters,wobble,wanderRng);
+    const clusterIdx=piece.slotGroup%slots.length;
+    const slot=slots[clusterIdx];
+    const slotAngle=slot.a||0;
+    const pOff=pocketOffset(clusterIdx,piece.indexInSlot,spread,'line',slotAngle);
+    const rx=clamp(Math.round(slot.x+pOff.x),0,GW-1);
+    const rz=clamp(Math.round(slot.z+pOff.z),0,GD-1);
+    return{x:rx,z:rz,src:`wander:c${clusterIdx}`,slotCenter:{x:Math.round(slot.x),z:Math.round(slot.z)}};
+  }
+
+  // ── FOLLOW: trace another group's positions with offset ──
+  if(piece.emitter==='follow'){
+    const targetRole=piece.emitParams.followTarget;
+    const followPieces=placed.filter(p=>p.placed&&!p.trimmed&&(p.role===targetRole||p.type===targetRole));
+    if(followPieces.length===0)return scatterEmit(piece);
+    // Sort by sibling index for path order
+    const sorted=[...followPieces].sort((a,b)=>a.sibIdx-b.sibIdx);
+    const positions=sorted.map(p=>({x:p.gx,z:p.gz}));
+    const offset=piece.emitParams.offset||2;
+    let side=piece.emitParams.side;
+    if(side===0||side===undefined)side=piece.sibIdx%2===0?1:-1; // FIX 8: alternate left/right
+    const numClusters=piece.emitParams.clusters||piece.sibTotal;
+    const spread=piece.emitParams.spread||0;
+    const slots=SHAPES.follow(positions,offset,side,numClusters);
+    if(slots.length===0)return scatterEmit(piece);
+    const clusterIdx=piece.slotGroup%slots.length;
+    const slot=slots[clusterIdx];
+    const slotAngle=slot.a||0;
+    const pOff=pocketOffset(clusterIdx,piece.indexInSlot,spread,'line',slotAngle);
+    const rx=clamp(Math.round(slot.x+pOff.x),0,GW-1);
+    const rz=clamp(Math.round(slot.z+pOff.z),0,GD-1);
+    return{x:rx,z:rz,src:`follow:c${clusterIdx}`,slotCenter:{x:Math.round(slot.x),z:Math.round(slot.z)}};
+  }
+
+  // ── BRANCH: arms radiating from a center ──────────
+  if(piece.emitter==='branch'){
+    const fromPiece=placed.find(p=>p.placed&&(p.role===piece.emitParams.from||p.type===piece.emitParams.from));
+    let bx=cx,bz=cz;
+    if(fromPiece){bx=fromPiece.gx+2;bz=fromPiece.gz+2} // offset to clear anchor
+    else if(piece.emitParams.from==='center'){bx=cx;bz=cz}
+    const numClusters=piece.emitParams.clusters||piece.sibTotal;
+    const spread=piece.emitParams.spread||0;
+    const arms=piece.emitParams.arms||4;
+    const armLen=piece.emitParams.armLen||5;
+    const wobble=piece.emitParams.wobble||0.4;
+    const branchRng=mkRng(S+8888);
+    const slots=SHAPES.branch(bx,bz,numClusters,arms,armLen,wobble,branchRng);
+    const clusterIdx=piece.slotGroup%slots.length;
+    const slot=slots[clusterIdx];
+    const slotAngle=slot.a||0;
+    const pOff=pocketOffset(clusterIdx,piece.indexInSlot,spread,'circle',slotAngle);
+    const rx=clamp(Math.round(slot.x+pOff.x),0,GW-1);
+    const rz=clamp(Math.round(slot.z+pOff.z),0,GD-1);
+    return{x:rx,z:rz,src:`branch:c${clusterIdx}`,slotCenter:{x:Math.round(slot.x),z:Math.round(slot.z)}};
+  }
+
+  return scatterEmit(piece);
+}
+
+function scatterEmit(piece){
+  if(piece.edges){
+    const s=Math.floor(R()*4);
+    return{x:s===0?1:s===1?GW-3:Math.floor(1+R()*(GW-4)),z:s===2?1:s===3?GD-3:Math.floor(1+R()*(GD-4)),src:'edge',slotCenter:null};
+  }
+  return{x:Math.floor(2+R()*(GW-6)),z:Math.floor(2+R()*(GD-6)),src:'scatter',slotCenter:null};
+}
+
+// ═══════════════════════════════════════════════════
+// MA
+// ═══════════════════════════════════════════════════
+function setupMa(descs){
+  const cx=Math.floor(GW/2),cz=Math.floor(GD/2)-2,r=Math.round(GW*0.15);
+  for(const d of descs){
+    if(/courtyard|center|open|square/i.test(d)){
+      for(let x=cx-r;x<=cx+r;x++)for(let z=cz-r;z<=cz+r;z++){
+        if(x>=0&&x<GW&&z>=0&&z<GD&&Math.sqrt((x-cx)**2+(z-cz)**2)<=r)maGrid[z*GW+x]=1;
+      }
+    }
+  }
+}
+
+function enforceMa(placed,log){
+  let rem=0;
+  for(const p of placed){
+    if(!p.placed||p.trimmed||p.pressure>8)continue;
+    for(const[cx,cy,cz]of p.cells){
+      if(isMa(cx,cz)){for(const[rx,ry,rz]of p.cells)gSet(rx,ry,rz,0);p.placed=false;p.trimmed=true;rem++;log.push({m:`MA: removed ${p.label}`,c:'lm'});break}
+    }
+  }
+  return rem;
+}
+
+function justify(placed,log){
+  let n=0;
+  const PATH_EMITTERS={wander:1,branch:1,follow:1};
+  for(let i=placed.length-1;i>=0;i--){
+    const p=placed[i];if(!p.placed||p.trimmed||p.pressure>6)continue;
+    // Never trim path pieces — their proximity IS the path
+    if(PATH_EMITTERS[p.emitter])continue;
+    const sr=placed.filter(q=>q!==p&&q.placed&&!q.trimmed&&q.role===p.role);if(!sr.length)continue;
+    for(const q of sr){
+      // Skip trimming within the same slot group — intra-cluster proximity is intentional
+      if(p.slotGroup!==undefined&&q.slotGroup!==undefined&&p.slotGroup===q.slotGroup&&p.type===q.type)continue;
+      if(Math.abs(p.gx-q.gx)+Math.abs(p.gz-q.gz)<=1){
+        for(const[rx,ry,rz]of p.cells)gSet(rx,ry,rz,0);p.placed=false;p.trimmed=true;n++;log.push({m:`TRIM: ${p.label}`,c:'lt'});break;
+    }}
+  }
+  return n;
+}
+
+// ═══════════════════════════════════════════════════
+// BFS FALLBACK — tiny local search when bounce fails
+// ═══════════════════════════════════════════════════
+function bfsFallback(cells,gx,gz,bounds,maxR,groundOnly){
+  maxR=maxR||3;
+  const seen=new Set([`${gx},${gz}`]),q=[[gx,gz,0]];
+  while(q.length){
+    const[x,z,r]=q.shift();if(r>maxR)break;
+    const drop=dropPiece(cells,x,z);
+    if(drop.valid&&(!groundOnly||drop.y===0))return{x,z,y:drop.y,cells:drop.cells};
+    for(const[dx,dz]of[[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=x+dx,nz=z+dz,k=`${nx},${nz}`;
+      if(nx<0||nx>GW-1-bounds.maxX||nz<0||nz>GD-1-bounds.maxZ)continue;
+      if(!seen.has(k)){seen.add(k);q.push([nx,nz,r+1])}
+    }
+  }
+  return null;
+}
+
+// ═══════════════════════════════════════════════════
+// SOLVER
+// ═══════════════════════════════════════════════════
+function solve(scene){
+  const log=[];const t0=performance.now();
+  R=mkRng(scene.seed);S=scene.seed;
+  initGrid();maGrid.fill(0);setupMa(scene.ma);
+
+  // Ma center for bounce direction
+  const maCX=Math.floor(GW/2),maCZ=Math.floor(GD/2)-2;
+
+  const placed=scene.pieces;
+  log.push({m:`${placed.length} pieces. v5: Ground check, side alternation, road gen.`,c:'le'});
+
+  for(const piece of placed){
+    const target=emit(piece,placed.filter(p=>p.placed),scene);
+    const slotCenter=target.slotCenter; // pocket center for local bouncing
+    const QUIVER=6;let ok=false;
+    let gx=target.x,gz=target.z,rot=Math.floor(R()*4);
+
+    // FIX 1: Generate cells ONCE, reuse across all arrows
+    const baseCells=PIECES[piece.type].cells(R);
+    const bounds=pieceBounds(normalizeCells(rotateCells(baseCells,0)));
+
+    for(let arrow=0;arrow<QUIVER;arrow++){
+      const rotCells=normalizeCells(rotateCells(baseCells,rot));
+
+      // FIX 3: Piece-aware clamp
+      gx=clamp(gx,0,GW-1-bounds.maxX);
+      gz=clamp(gz,0,GD-1-bounds.maxZ);
+
+      // FIX 5: Ma check — bounce toward ma center using aimed bounce
+      let inMa=false;
+      if(!piece.central){
+        for(const[dx,,dz]of rotCells)if(isMa(gx+dx,gz+dz)){inMa=true;break}
+      }
+      if(inMa){
+        const b=aimedBounce(gx,gz,target.x,target.z,maCX,maCZ,bounds);
+        gx=b.x;gz=b.z;rot=(rot+Math.floor(R()*2))%4;
+        continue;
+      }
+
+      const drop=dropPiece(rotCells,gx,gz);
+      const groundOnly=!PIECES[piece.type].stackable;
+      if(drop.valid){
+        // FIX 7: Ground objects must land at y=0 — reject stacking
+        if(drop.y>0&&groundOnly){
+          log.push({m:`STACK ${piece.label} gy=${drop.y}, bounce`,c:'lw'});
+          // fall through to bounce
+        } else {
+          commitPiece(piece,gx,drop.y,gz,rot,drop.cells);ok=true;
+          log.push({m:`DROP ${piece.label} (${gx},${drop.y},${gz}) [${target.src}] a=${arrow+1}`,c:'ld'});break;
+        }
+      }
+
+      // FIX 6: After 2 failed bounces, try BFS fallback
+      if(arrow>=2){
+        const bfs=bfsFallback(rotCells,gx,gz,bounds,3,groundOnly);
+        if(bfs){
+          commitPiece(piece,bfs.x,bfs.y,bfs.z,rot,bfs.cells);ok=true;
+          log.push({m:`DROP ${piece.label} (${bfs.x},${bfs.y},${bfs.z}) [${target.src}+bfs] a=${arrow+1}`,c:'ld'});break;
+        }
+      }
+
+      // POCKET-AWARE BOUNCE: first 2 attempts stay near slot center
+      if(arrow<2&&slotCenter){
+        // FIX 10: If slot center is occupied, pocket bounce will just re-aim at the blocked cell.
+        // Skip straight to BFS instead of wasting 2 arrows.
+        if(gOcc(slotCenter.x,0,slotCenter.z)){
+          const bfs=bfsFallback(rotCells,gx,gz,bounds,4,groundOnly);
+          if(bfs){
+            commitPiece(piece,bfs.x,bfs.y,bfs.z,rot,bfs.cells);ok=true;
+            log.push({m:`DROP ${piece.label} (${bfs.x},${bfs.y},${bfs.z}) [${target.src}+bfs:slot-blocked] a=${arrow+1}`,c:'ld'});break;
+          }
+        }
+        const dx=slotCenter.x-gx,dz=slotCenter.z-gz;
+        const dl=Math.sqrt(dx*dx+dz*dz)||1;
+        const step=1+(arrow===0?1:0);
+        gx=clamp(Math.round(gx+dx/dl*step),0,GW-1-bounds.maxX);
+        gz=clamp(Math.round(gz+dz/dl*step),0,GD-1-bounds.maxZ);
+        rot=(rot+Math.floor(R()*2))%4;
+      } else {
+        // Global aimed bounce: find blocker
+        let bx=gx,bz=gz;
+        for(const[dx,,dz]of rotCells){
+          if(gOcc(gx+dx,0,gz+dz)){bx=gx+dx;bz=gz+dz;break}
+        }
+        if(bx===gx&&bz===gz){bx=gx<GW/2?-1:GW;bz=gz<GD/2?-1:GD}
+        const b=aimedBounce(gx,gz,target.x,target.z,bx,bz,bounds);
+        gx=b.x;gz=b.z;rot=(rot+Math.floor(R()*2))%4;
+      }
+    }
+    if(!ok)log.push({m:`SKIP ${piece.label}`,c:'lw'});
+  }
+
+  // Magnet alignment pass
+  const magCount=solveMagnets(placed,log);
+
+  // Refinements
+  const maRem=enforceMa(placed,log);
+  const trimN=justify(placed,log);
+
+  const elapsed=performance.now()-t0;
+  const pc=placed.filter(p=>p.placed&&!p.trimmed).length;
+  log.push({m:`Done ${elapsed.toFixed(1)}ms — ${pc} placed, ${magCount} aligned, ${maRem} ma'd, ${trimN} trimmed`,c:'ld'});
+  return{placed,log,elapsed,maRem,trimN,magCount};
+}
+
+// ═══════════════════════════════════════════════════
+// POST-PLACEMENT: Neighbor Signatures + Classification
+// ═══════════════════════════════════════════════════
+function neighborSig(piece, placed) {
+  const sig = {};
+  const dirs = [{k:'N',dx:0,dz:-1},{k:'E',dx:1,dz:0},{k:'S',dx:0,dz:1},{k:'W',dx:-1,dz:0}];
+  for (const {k,dx,dz} of dirs) {
+    // Check 1 and 2 cells away
+    const n1 = placed.find(q=>q!==piece&&q.placed&&!q.trimmed&&q.gx===piece.gx+dx&&q.gz===piece.gz+dz);
+    const n2 = !n1 ? placed.find(q=>q!==piece&&q.placed&&!q.trimmed&&q.gx===piece.gx+dx*2&&q.gz===piece.gz+dz*2) : null;
+    if (n1) sig[k]={type:n1.type,role:n1.role,dist:1,gx:n1.gx,gz:n1.gz};
+    else if (n2) sig[k]={type:n2.type,role:n2.role,dist:2,gx:n2.gx,gz:n2.gz};
+    else sig[k]={type:null,dist:0};
+  }
+  return sig;
+}
+
+function classifyAll(placed) {
+  const active = placed.filter(p=>p.placed&&!p.trimmed);
+  for (const p of active) {
+    p.sig = neighborSig(p, active);
+    // Bitmask: N=8, E=4, S=2, W=1 (same-type neighbors)
+    let mask = 0;
+    if (p.sig.N.type===p.type) mask|=8;
+    if (p.sig.E.type===p.type) mask|=4;
+    if (p.sig.S.type===p.type) mask|=2;
+    if (p.sig.W.type===p.type) mask|=1;
+    p.nMask = mask;
+    // Variant name
+    const bits = ((mask&8)?'N':'') + ((mask&4)?'E':'') + ((mask&2)?'S':'') + ((mask&1)?'W':'');
+    p.variant = bits || 'isolated';
+  }
+  return active;
+}
+
+// ═══════════════════════════════════════════════════
+// ADJACENCY FEATURE DETECTION
+// ═══════════════════════════════════════════════════
+function detectConnections(placed) {
+  const conns = [];
+  const seen = new Set();
+  const active = placed.filter(p=>p.placed&&!p.trimmed);
+  const CONNECTABLE = {iron_fence:1,fence:1,wall:1,dock_plank:1,gravestone:1,road:1};
+  for (const a of active) {
+    if (!CONNECTABLE[a.type]) continue;
+    for (const b of active) {
+      if (a===b || a.type!==b.type) continue;
+      const d = Math.abs(a.gx-b.gx)+Math.abs(a.gz-b.gz);
+      // Group-aware: generous within same group, strict between groups
+      const sameGroup=(a.slotGroup!==undefined&&b.slotGroup!==undefined&&a.slotGroup===b.slotGroup);
+      const threshold=sameGroup?3:2;
+      if (d>threshold) continue;
+      const key = a.id<b.id?`${a.id}-${b.id}`:`${b.id}-${a.id}`;
+      if (seen.has(key)) continue; seen.add(key);
+      conns.push({a,b,dist:d,sameGroup});
+    }
+  }
+  return conns;
+}
+
+// ═══════════════════════════════════════════════════
+// DETERMINISTIC SUB-CELL OFFSET
+// ═══════════════════════════════════════════════════
+function subcellOffset(p) {
+  let ox=0,oz=0;
+  const s=p.sig;
+  // Same-type neighbors: pull toward them (tighten clusters)
+  for (const k of ['N','E','S','W']) {
+    if (s[k].type===p.type && s[k].dist===1) {
+      const dx=k==='E'?1:k==='W'?-1:0;
+      const dz=k==='S'?1:k==='N'?-1:0;
+      ox+=dx*0.18; oz+=dz*0.18;
+    } else if (s[k].type && s[k].type!==p.type && s[k].dist===1) {
+      // Different type: PUSH AWAY harder — this is what prevents cramping
+      const dx=k==='E'?1:k==='W'?-1:0;
+      const dz=k==='S'?1:k==='N'?-1:0;
+      ox-=dx*0.25; oz-=dz*0.25;
+    }
+  }
+  // Larger organic jitter — breaks the grid feel
+  const h=((p.gx*7919+p.gz*104729)&0xFFFF)/65536;
+  const h2=((p.gx*31337+p.gz*7727)&0xFFFF)/65536;
+  ox+=(h-0.5)*0.3; oz+=(h2-0.5)*0.3;
+  return{x:clamp(ox,-0.6,0.6),z:clamp(oz,-0.6,0.6)};
+}
+
+// ═══════════════════════════════════════════════════
+// RENDERER — Three.js with real generators
+// ═══════════════════════════════════════════════════
+let sc3,cam,ren,objs=[];const CELL=1.0;
+function initThree(){
+  const c=document.getElementById('cv'),w=document.getElementById('R');
+  sc3=new THREE.Scene();sc3.background=new THREE.Color(0x87CEEB);sc3.fog=new THREE.FogExp2(0x87CEEB,0.015);
+  cam=new THREE.PerspectiveCamera(50,w.clientWidth/w.clientHeight,0.1,200);
+  ren=new THREE.WebGLRenderer({canvas:c,antialias:true});ren.setSize(w.clientWidth,w.clientHeight);
+  ren.setPixelRatio(Math.min(devicePixelRatio,2));ren.shadowMap.enabled=true;ren.shadowMap.type=THREE.PCFSoftShadowMap;
+  sc3.add(new THREE.AmbientLight(0x8899bb,0.6));
+  const sun=new THREE.DirectionalLight(0xffeedd,1.2);sun.position.set(15,20,10);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
+  const sc2=sun.shadow.camera;sc2.near=0.5;sc2.far=60;sc2.left=-15;sc2.right=15;sc2.top=15;sc2.bottom=-15;
+  sc3.add(sun);sc3.add(new THREE.DirectionalLight(0x6688bb,0.3));
+  let drag=false,px,py,th=Math.PI/4,ph=Math.PI/3.2,rd=22;
+  const uc=()=>{const cx=GW*CELL/2,cz=GD*CELL/2;cam.position.set(cx+rd*Math.sin(ph)*Math.cos(th),rd*Math.cos(ph),cz+rd*Math.sin(ph)*Math.sin(th));cam.lookAt(cx,2,cz)};uc();
+  c.addEventListener('pointerdown',e=>{drag=true;px=e.clientX;py=e.clientY});
+  addEventListener('pointermove',e=>{if(!drag)return;th+=(e.clientX-px)*0.008;ph=clamp(ph+(e.clientY-py)*0.008,0.15,1.45);px=e.clientX;py=e.clientY;uc()});
+  addEventListener('pointerup',()=>drag=false);
+  c.addEventListener('wheel',e=>{rd=clamp(rd+e.deltaY*0.03,5,50);uc()},{passive:true});
+  addEventListener('resize',()=>{cam.aspect=w.clientWidth/w.clientHeight;cam.updateProjectionMatrix();ren.setSize(w.clientWidth,w.clientHeight)});
+}
+function clearScene(){for(const o of objs){sc3.remove(o);o.geometry?.dispose();o.material?.dispose()}objs=[]}
+
+function addMesh(geo,color,x,y,z,opts={}){
+  const mat=new THREE.MeshStandardMaterial({color,roughness:opts.rough||0.8,metalness:opts.metal||0.05});
+  if(opts.emissive){mat.emissive=new THREE.Color(opts.emissive);mat.emissiveIntensity=opts.emissiveI||0.5}
+  const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);
+  if(opts.ry)m.rotation.y=opts.ry;if(opts.rx)m.rotation.x=opts.rx;if(opts.rz)m.rotation.z=opts.rz;
+  m.castShadow=true;m.receiveShadow=true;sc3.add(m);objs.push(m);return m;
+}
+
+// ═══════════════════════════════════════════════════
+// REAL GENERATORS — context-aware
+// ═══════════════════════════════════════════════════
+const GEN={
+  crypt(p,wx,wz,r){
+    addMesh(new THREE.BoxGeometry(2.8,1.8,2.8),0x4a4a50,wx,0.9,wz,{ry:p.rot});
+    addMesh(new THREE.BoxGeometry(3.1,0.25,3.1),0x3a3a40,wx,1.88,wz,{ry:p.rot});
+    addMesh(new THREE.ConeGeometry(1.6,1.1,4),0x3a3a40,wx,2.6,wz,{ry:p.rot+Math.PI/4});
+    // Cross
+    addMesh(new THREE.BoxGeometry(0.08,0.5,0.08),0x5a5a5e,wx,3.4,wz);
+    addMesh(new THREE.BoxGeometry(0.35,0.08,0.08),0x5a5a5e,wx,3.5,wz);
+    // Door (faces magnet direction)
+    const da=p.rot||0;
+    addMesh(new THREE.BoxGeometry(0.7,1.1,0.08),0x2a2015,wx+Math.sin(da)*1.4,0.55,wz+Math.cos(da)*1.4,{ry:da});
+    // Moss
+    for(let i=0;i<3;i++){const a=r()*6.28,d=0.6+r()*0.6;
+      addMesh(new THREE.BoxGeometry(0.25+r()*0.3,0.04,0.25+r()*0.3),0x2a4a2a,wx+Math.cos(a)*d,0.02+r()*0.4,wz+Math.sin(a)*d)}
+  },
+
+  gravestone(p,wx,wz,r){
+    const h=0.5+r()*0.35,w=0.35+r()*0.15;
+    const lean=(r()-0.5)*0.12;
+    const facing=p.rot||0;
+    // Slab
+    addMesh(new THREE.BoxGeometry(w,h,0.1),0x7a7a80,wx,h/2,wz,{ry:facing,rz:lean});
+    // Rounded top
+    addMesh(new THREE.CylinderGeometry(w/2,w/2,0.1,8,1,false,0,Math.PI),0x7a7a80,wx,h,wz,{ry:facing,rz:lean+Math.PI/2,rx:Math.PI/2});
+    // Dirt mound
+    addMesh(new THREE.BoxGeometry(0.5,0.06,0.8),0x3a3020,wx-Math.sin(facing)*0.25,0.03,wz-Math.cos(facing)*0.25,{ry:facing});
+    // If neighbor gravestones — subtle row alignment marker on ground
+    if(p.nMask>0)addMesh(new THREE.BoxGeometry(0.6,0.02,0.04),0x444440,wx,0.01,wz,{ry:facing});
+  },
+
+  iron_fence(p,wx,wz,r,conns){
+    // Post
+    addMesh(new THREE.CylinderGeometry(0.035,0.035,1.4,6),0x1a1a22,wx,0.7,wz,{metal:0.6,rough:0.4});
+    // Spear tip
+    addMesh(new THREE.ConeGeometry(0.055,0.18,4),0x2a2a32,wx,1.5,wz,{metal:0.6});
+    // Rails toward connected neighbors (only draw from 'a' side to avoid doubles)
+    const myConns=conns.filter(c=>c.a===p);
+    for(const conn of myConns){
+      const other=conn.b;
+      const dx=other.worldX-wx,dz=other.worldZ-wz;
+      const dist=Math.sqrt(dx*dx+dz*dz);
+      const mx=wx+dx/2,mz=wz+dz/2;
+      const angle=Math.atan2(dx,dz);
+      // Top rail
+      addMesh(new THREE.CylinderGeometry(0.015,0.015,dist,4),0x1a1a22,mx,1.1,mz,{rx:Math.PI/2,ry:angle,metal:0.6,rough:0.4});
+      // Bottom rail
+      addMesh(new THREE.CylinderGeometry(0.015,0.015,dist,4),0x1a1a22,mx,0.5,mz,{rx:Math.PI/2,ry:angle,metal:0.6,rough:0.4});
+    }
+  },
+
+  fence(p,wx,wz,r,conns){
+    addMesh(new THREE.BoxGeometry(0.12,1.1,0.12),0x5c4a3a,wx,0.55,wz);
+    const myConns=conns.filter(c=>c.a===p);
+    for(const conn of myConns){
+      const other=conn.b;
+      const dx=other.worldX-wx,dz=other.worldZ-wz;
+      const dist=Math.sqrt(dx*dx+dz*dz);
+      const mx=wx+dx/2,mz=wz+dz/2;
+      const angle=Math.atan2(dx,dz);
+      addMesh(new THREE.BoxGeometry(dist,0.08,0.06),0x5c4a3a,mx,0.85,mz,{ry:angle});
+      addMesh(new THREE.BoxGeometry(dist,0.08,0.06),0x5c4a3a,mx,0.35,mz,{ry:angle});
+    }
+  },
+
+  dead_tree(p,wx,wz,r){
+    const h=2.5+r()*2;const lean=(r()-0.5)*0.08;
+    addMesh(new THREE.CylinderGeometry(0.06,0.18,h,6),0x3a2a18,wx,h/2,wz,{rz:lean});
+    const nb=2+Math.floor(r()*3);
+    for(let i=0;i<nb;i++){
+      const bh=h*0.4+r()*h*0.4,ba=r()*6.28,bl=0.6+r()*1;
+      addMesh(new THREE.CylinderGeometry(0.015,0.04,bl,4),0x3a2a18,
+        wx+Math.cos(ba)*bl/2,bh,wz+Math.sin(ba)*bl/2,{rx:Math.PI/3.5*(r()>0.5?1:-1),ry:ba});
+    }
+    for(let i=0;i<2;i++){const ra=r()*6.28;
+      addMesh(new THREE.CylinderGeometry(0.015,0.04,0.5,4),0x3a2a18,wx+Math.cos(ra)*0.25,0.08,wz+Math.sin(ra)*0.25,{rx:Math.PI/3,ry:ra})}
+  },
+
+  lantern(p,wx,wz,r){
+    addMesh(new THREE.CylinderGeometry(0.04,0.06,1.5,6),0x3a3a3e,wx,0.75,wz,{metal:0.4});
+    addMesh(new THREE.BoxGeometry(0.22,0.26,0.22),0x4a4a4e,wx,1.65,wz,{metal:0.3});
+    addMesh(new THREE.BoxGeometry(0.16,0.18,0.16),0xffaa44,wx,1.65,wz,{emissive:0xffaa44,emissiveI:0.8,rough:0.3});
+    addMesh(new THREE.ConeGeometry(0.16,0.13,4),0x3a3a3e,wx,1.86,wz,{ry:Math.PI/4,metal:0.4});
+    const light=new THREE.PointLight(0xffaa33,0.5,4.5,2);light.position.set(wx,1.9,wz);sc3.add(light);objs.push(light);
+  },
+
+  tower(p,wx,wz,r){
+    const floors=3;let y=0;const bw=1.8;
+    for(let f=0;f<floors;f++){const fw=bw-f*0.2,fh=2;
+      addMesh(new THREE.BoxGeometry(fw,fh,fw),f===0?0x6a6a5e:0x7a7a6e,wx,y+fh/2,wz);y+=fh}
+    addMesh(new THREE.ConeGeometry(bw*0.7,1.5,4),0x5c3a2a,wx,y+0.75,wz,{ry:Math.PI/4});
+    // Battlements if neighbors
+    if(p.nMask>0){for(let i=0;i<4;i++){const a=i*Math.PI/2;
+      addMesh(new THREE.BoxGeometry(0.25,0.3,0.25),0x6a6a5e,wx+Math.cos(a)*bw/2,y+0.15,wz+Math.sin(a)*bw/2)}}
+  },
+
+  wall(p,wx,wz,r,conns){
+    const isCorner=p.variant.length===2&&!p.variant.includes('N')||p.variant.length===2&&!p.variant.includes('S')&&p.variant.includes('E')&&p.variant.includes('N');
+    const h=1.8+r()*0.5,w=0.85;
+    // Main wall block
+    addMesh(new THREE.BoxGeometry(w,h,0.4),0x8a8a7e,wx,h/2,wz,{ry:p.rot||0});
+    // If corner variant — add corner accent
+    if(p.nMask>=3){addMesh(new THREE.BoxGeometry(0.5,h+0.2,0.5),0x7a7a6e,wx,h/2+0.1,wz)}
+    // Top stones
+    addMesh(new THREE.BoxGeometry(w+0.1,0.12,0.5),0x7a7a6e,wx,h+0.06,wz,{ry:p.rot||0});
+    // Damage
+    if(r()<0.3){const dh=h*0.3;addMesh(new THREE.BoxGeometry(0.2,dh,0.2),0x6a6a5e,wx+(r()-0.5)*0.3,dh/2,wz+0.3,{ry:r()*3})}
+  },
+
+  house(p,wx,wz,r){
+    const w=1.8,d=1.8,h=1.8;
+    addMesh(new THREE.BoxGeometry(w,h,d),0x8b7355,wx,h/2,wz,{ry:p.rot||0});
+    addMesh(new THREE.ConeGeometry(w*0.8,1.1,4),0x6a3a2a,wx,h+0.55,wz,{ry:(p.rot||0)+Math.PI/4});
+    // Door (faces toward magnet target)
+    const da=p.rot||0;
+    addMesh(new THREE.BoxGeometry(0.4,0.9,0.05),0x4a3020,wx+Math.sin(da)*w/2,0.45,wz+Math.cos(da)*d/2,{ry:da});
+    // Window
+    addMesh(new THREE.BoxGeometry(0.3,0.3,0.05),0x6688aa,wx+Math.sin(da+Math.PI/2)*w/2*0.6,1.1,wz+Math.cos(da+Math.PI/2)*d/2*0.6,{ry:da+Math.PI/2});
+  },
+
+  stall(p,wx,wz,r){
+    const w=2,d=1.6;
+    addMesh(new THREE.BoxGeometry(w,0.9,d),0x8b7355,wx,0.45,wz,{ry:p.rot||0});
+    addMesh(new THREE.BoxGeometry(w+0.3,0.06,d+0.3),0x9a6a4a,wx,1.4,wz,{ry:p.rot||0});
+    addMesh(new THREE.CylinderGeometry(0.04,0.04,1.4,6),0x5c4a3a,wx-w/2+0.1,0.7,wz-d/2+0.1);
+    addMesh(new THREE.CylinderGeometry(0.04,0.04,1.4,6),0x5c4a3a,wx+w/2-0.1,0.7,wz-d/2+0.1);
+  },
+
+  well(p,wx,wz,r){
+    addMesh(new THREE.CylinderGeometry(0.7,0.8,0.7,8),0x7a7a6e,wx,0.35,wz);
+    addMesh(new THREE.CylinderGeometry(0.04,0.04,1.1,6),0x5c4a3a,wx-0.35,0.9,wz);
+    addMesh(new THREE.CylinderGeometry(0.04,0.04,1.1,6),0x5c4a3a,wx+0.35,0.9,wz);
+    addMesh(new THREE.BoxGeometry(0.85,0.06,0.06),0x5c4a3a,wx,1.45,wz);
+  },
+
+  column(p,wx,wz,r){
+    const h=2.5+r()*1.5;
+    addMesh(new THREE.CylinderGeometry(0.18,0.22,0.2,8),0x9a9a8e,wx,0.1,wz); // base
+    addMesh(new THREE.CylinderGeometry(0.15,0.18,h,8),0x9a9a8e,wx,0.2+h/2,wz); // shaft
+    addMesh(new THREE.CylinderGeometry(0.22,0.15,0.2,8),0x9a9a8e,wx,0.2+h+0.1,wz); // capital
+    if(r()<0.3){// Fallen chunk nearby
+      addMesh(new THREE.CylinderGeometry(0.12,0.12,0.5,6),0x8a8a7e,wx+0.4+r()*0.3,0.1,wz+r()*0.4,{rx:Math.PI/2})}
+  },
+
+  platform(p,wx,wz,r){
+    const w=4;
+    addMesh(new THREE.BoxGeometry(w,0.4,w),0x8a8a7e,wx,0.2,wz);
+    addMesh(new THREE.BoxGeometry(w+0.2,0.08,w+0.2),0x7a7a6e,wx,0.42,wz); // top trim
+  },
+
+  tree(p,wx,wz,r){
+    const h=2+r()*1.5;
+    addMesh(new THREE.CylinderGeometry(0.08,0.15,h,6),0x5c4a3a,wx,h/2,wz);
+    addMesh(new THREE.SphereGeometry(0.8+r()*0.4,8,6),0x2d5a1e,wx,h+0.5,wz);
+  },
+
+  rubble(p,wx,wz,r){
+    const n=2+Math.floor(r()*3);
+    for(let i=0;i<n;i++){const s=0.08+r()*0.2;
+      addMesh(r()>0.5?new THREE.BoxGeometry(s,s*0.7,s):new THREE.SphereGeometry(s/2,5,4),0x5a5a55,
+        wx+(r()-0.5)*0.6,s*0.35,wz+(r()-0.5)*0.6,{ry:r()*3})}
+  },
+
+  road(p,wx,wz,r){
+    // FIX 9: Flat stepping stones instead of rubble
+    const colors=[0x7a7a6e,0x6a6a5e,0x8a8a7e,0x757568];
+    const hasNeighbor=p.nMask>0;
+    // Main slab — bigger if connected to form continuous path
+    const sw=hasNeighbor?0.7+r()*0.2:0.4+r()*0.2;
+    const sd=hasNeighbor?0.7+r()*0.2:0.4+r()*0.2;
+    const col=colors[Math.floor(r()*colors.length)];
+    addMesh(new THREE.BoxGeometry(sw,0.06,sd),col,wx,0.03,wz,{ry:r()*0.4-0.2,rough:0.95});
+    // Secondary smaller stone offset
+    if(r()>0.3){
+      const s2=0.15+r()*0.2;
+      addMesh(new THREE.BoxGeometry(s2,0.05,s2),colors[Math.floor(r()*colors.length)],
+        wx+(r()-0.5)*0.5,0.025,wz+(r()-0.5)*0.5,{ry:r()*1.5,rough:0.95});
+    }
+    // Dirt border
+    addMesh(new THREE.PlaneGeometry(0.9,0.9),0x3a3520,wx,0.005,wz,{rx:-Math.PI/2,ry:r()*0.3,rough:1});
+  },
+
+  campfire(p,wx,wz,r){
+    for(let i=0;i<6;i++){const a=i*Math.PI/3;
+      addMesh(new THREE.BoxGeometry(0.15,0.12,0.08),0x5a5a55,wx+Math.cos(a)*0.25,0.06,wz+Math.sin(a)*0.25,{ry:a})}
+    addMesh(new THREE.ConeGeometry(0.12,0.35,5),0xdd6600,wx,0.3,wz,{emissive:0xff4400,emissiveI:1.0});
+    const fl=new THREE.PointLight(0xff6622,0.8,6,2);fl.position.set(wx,0.5,wz);sc3.add(fl);objs.push(fl);
+  },
+
+  tent(p,wx,wz,r){
+    const da=p.rot||0;
+    addMesh(new THREE.BoxGeometry(1.6,0.05,2.2),0x8a7a5a,wx,0.02,wz,{ry:da}); // footprint
+    addMesh(new THREE.ConeGeometry(1.1,1.4,4),0x9a8a6a,wx,0.72,wz,{ry:da+Math.PI/4}); // body
+    // Entrance flap
+    addMesh(new THREE.BoxGeometry(0.5,0.8,0.04),0x7a6a4a,wx+Math.sin(da)*0.9,0.4,wz+Math.cos(da)*0.9,{ry:da});
+  },
+
+  log(p,wx,wz,r){
+    const a=p.rot||r()*3;
+    addMesh(new THREE.CylinderGeometry(0.08,0.1,0.9,6),0x5a3a1a,wx,0.1,wz,{rx:Math.PI/2,ry:a});
+  },
+
+  barrel(p,wx,wz,r){
+    addMesh(new THREE.CylinderGeometry(0.25,0.28,0.6,8),0x6a4a2a,wx,0.3,wz);
+    addMesh(new THREE.CylinderGeometry(0.27,0.27,0.04,8),0x4a3a1a,wx,0.15,wz); // band
+    addMesh(new THREE.CylinderGeometry(0.27,0.27,0.04,8),0x4a3a1a,wx,0.45,wz);
+  },
+
+  hay(p,wx,wz,r){
+    addMesh(new THREE.CylinderGeometry(0.6,0.6,0.5,12),0xbaa840,wx,0.25,wz);
+    addMesh(new THREE.CylinderGeometry(0.55,0.6,0.05,12),0xa89830,wx,0.52,wz);
+  },
+
+  barn(p,wx,wz,r){
+    const w=3.5,d=2.5,h=2.5;
+    addMesh(new THREE.BoxGeometry(w,h,d),0x8a3a2a,wx,h/2,wz,{ry:p.rot||0});
+    addMesh(new THREE.ConeGeometry(w*0.6,1.2,4),0x6a2a1a,wx,h+0.6,wz,{ry:(p.rot||0)+Math.PI/4});
+    // Barn door
+    const da=p.rot||0;
+    addMesh(new THREE.BoxGeometry(0.8,1.4,0.06),0x5a2a1a,wx+Math.sin(da)*d/2,0.7,wz+Math.cos(da)*d/2,{ry:da});
+  },
+
+  silo(p,wx,wz,r){
+    addMesh(new THREE.CylinderGeometry(0.4,0.45,3.5,8),0x9a9a9a,wx,1.75,wz);
+    addMesh(new THREE.ConeGeometry(0.5,0.6,8),0x8a8a8a,wx,3.8,wz);
+  },
+
+  pond(p,wx,wz,r){
+    addMesh(new THREE.CylinderGeometry(1.8,2,0.15,12),0x3a6a9a,wx,0.05,wz,{rough:0.2,metal:0.1});
+  },
+};
+
+// ═══════════════════════════════════════════════════
+// MAIN RENDER PASS
+// ═══════════════════════════════════════════════════
+function renderScene(placed,connections,scene){
+  clearScene();
+  const gr=mkRng(S+777); // generator rng
+
+  // Ground
+  if(scene.hasWater){
+    addMesh(new THREE.PlaneGeometry(GW,12),0x5c4a3a,GW*CELL/2,0,6,{rx:-Math.PI/2});
+    addMesh(new THREE.PlaneGeometry(GW,8),0x2d6a9f,GW*CELL/2,-0.05,16,{rx:-Math.PI/2,rough:0.2});
+  } else {
+    addMesh(new THREE.PlaneGeometry(GW+2,GD+2),0x4a5a3a,GW*CELL/2,0,GD*CELL/2,{rx:-Math.PI/2});
+  }
+
+  // FIRST PASS: compute world positions (needed for connections)
+  const active=placed.filter(p=>p.placed&&!p.trimmed);
+  for(const p of active){
+    const off=subcellOffset(p);
+    p.worldX=p.gx*CELL+CELL/2+off.x;
+    p.worldZ=p.gz*CELL+CELL/2+off.z;
+  }
+
+  // SECOND PASS: render with real generators
+  for(const p of active){
+    const gen=GEN[p.type];
+    if(gen) gen(p,p.worldX,p.worldZ,gr,connections);
+  }
+
+  // Ma visualization
+  for(let x=0;x<GW;x++)for(let z=0;z<GD;z++){
+    if(maGrid[z*GW+x]===1){
+      addMesh(new THREE.PlaneGeometry(CELL*0.85,CELL*0.85),0x3a5a7a,x*CELL+CELL/2,0.01,z*CELL+CELL/2,{rx:-Math.PI/2});
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// EXAMPLES
+// ═══════════════════════════════════════════════════
+const EX={
+graveyard:`# seed=666
+crypt: center
+gravestones: x12, circle crypt at 6, clusters=4, spread=1
+lanterns: x4, circle crypt at 9
+iron_fences: x14, circle crypt at 13, clusters=5, spread=1
+dead_trees: x4, edges
+rubble: x3, scatter
+ma: open courtyard`,
+
+square_fort:`# seed=88
+tower: center, tall
+walls: x12, square tower at 7, clusters=4, spread=1
+fences: x16, square tower at 10, clusters=6, spread=1
+rubble: x3, scatter
+ma: open courtyard`,
+
+village:`# seed=13
+well: center
+houses: x6, circle well at 7, spread=1
+trees: x4, edges
+ma: open center`,
+
+temple:`# seed=77
+platform: center
+columns: x8, circle platform at 6
+rubble: x3, scatter
+trees: x3, edges
+ma: open courtyard`,
+
+campsite:`# seed=303
+campfire: center
+tents: x4, circle campfire at 6
+logs: x6, circle campfire at 3, clusters=2, spread=1
+trees: x8, circle campfire at 11, spread=2
+ma: open center`,
+
+rect_market:`# seed=55
+well: center
+stalls: x8, rectangle well at 6 9, clusters=4, spread=1
+trees: x2, edges
+rubble: x2, scatter
+ma: open center`,
+
+walled_city:`# seed=404
+tower: center, tall
+walls: x16, circle tower at 7, clusters=4, spread=1, arc=0.85
+fences: x12, circle tower at 10, clusters=4, spread=1
+houses: x4, circle tower at 4, spread=1
+rubble: x3, scatter
+ma: open courtyard`,
+
+fenced_yard:`# seed=42
+barn: center
+fences: x20, circle barn at 9, clusters=5, spread=1
+hay: x4, circle barn at 4, clusters=2, spread=1
+trees: x6, circle barn at 13, spread=3
+ma: open center`,
+
+dense_graveyard:`# seed=999
+crypt: center
+gravestones: x20, circle crypt at 7, clusters=5, spread=1
+iron_fences: x18, circle crypt at 12, clusters=6, spread=1
+lanterns: x6, circle crypt at 9, clusters=3, spread=1
+dead_trees: x4, edges
+ma: open courtyard`,
+
+wandering_road:`# seed=512
+tower: center, tall
+road: x18, wander from tower to south, wobble=0.6
+lanterns: x8, follow road, offset=3, clusters=4, spread=1
+trees: x6, follow road, offset=5, spread=2
+rubble: x3, scatter
+ma: open courtyard`,
+
+village_paths:`# seed=256
+well: center
+paths: x16, branch from well, arms=4, wobble=0.3, len=9
+houses: x8, follow paths, offset=4, spread=1
+lanterns: x4, follow paths, offset=2
+trees: x4, edges
+ma: open center`,
+
+forest_trail:`# seed=777
+campfire: center
+road: x22, wander from campfire to north, wobble=0.8, clusters=5, spread=1
+trees: x12, follow road, offset=5, spread=3
+logs: x4, follow road, offset=2, spread=1
+rubble: x3, scatter
+ma: open center`,
+};
+
+// ═══════════════════════════════════════════════════
+// UI
+// ═══════════════════════════════════════════════════
+const inp=document.getElementById('inp'),logEl=document.getElementById('log');
+const exEl=document.getElementById('exBtns');
+for(const[k]of Object.entries(EX)){const b=document.createElement('button');b.className='ex';b.textContent=k;b.addEventListener('click',()=>{inp.value=EX[k]});exEl.appendChild(b)}
+inp.value=EX.graveyard;
+
+document.getElementById('bGo').addEventListener('click',run);
+document.getElementById('bSeed').addEventListener('click',()=>{S=Math.floor(Math.random()*99999);inp.value=inp.value.replace(/seed[=:]\d+/i,`seed=${S}`);run()});
+document.getElementById('bClr').addEventListener('click',()=>{inp.value='';clearScene();logEl.innerHTML='';document.getElementById('pins').innerHTML='';document.getElementById('stats').innerHTML=''});
+
+function run(){
+  const text=inp.value.trim();if(!text)return;logEl.innerHTML='';
+  const scene=parse(text);
+  const result=solve(scene);
+  
+  // NEW: Post-placement classification + adjacency
+  const classified=classifyAll(result.placed);
+  const connections=detectConnections(result.placed);
+  result.log.push({m:`CLASSIFY: ${classified.length} variants assigned`,c:'lk'});
+  result.log.push({m:`CONNECT: ${connections.length} adjacency links`,c:'lk'});
+  
+  // Render with real generators (not cubes)
+  renderScene(result.placed,connections,scene);
+  
+  for(const e of result.log){const d=document.createElement('div');d.className=e.c;d.textContent=e.m;logEl.appendChild(d)}
+  logEl.scrollTop=logEl.scrollHeight;
+
+  document.getElementById('pins').innerHTML=result.placed.map(p=>{
+    const cls=p.placed&&!p.trimmed?'pin pin-ok':p.trimmed?'pin pin-trim':'pin pin-skip';
+    const pos=p.placed?`(${p.gx},${p.gy},${p.gz})`:'—';
+    const mag=MAGNETS[p.type]?.face?` 🧲${p.rot!==0?p.rot.toFixed(1)+'r':'—'}`:'';
+    const var_=p.variant?` [${p.variant}]`:'';
+    const grp=p.slotGroup!==undefined?` g${p.slotGroup}`:'';
+    const conn=connections.filter(c=>c.a===p||c.b===p).length;
+    const connS=conn?` ⟷${conn}`:'';
+    return`<div class="${cls}"><span>${p.placed&&!p.trimmed?'✓':p.trimmed?'✂':'✗'} ${p.label}</span><span style="color:#555">${pos}${mag}${var_}${grp}${connS}</span></div>`;
+  }).join('');
+
+  const pc=result.placed.filter(p=>p.placed&&!p.trimmed);
+  const totalCells=pc.reduce((s,p)=>s+p.cells.length,0);
+  const it=text.split(/\s+/).filter(t=>t).length;
+  document.getElementById('stats').innerHTML=[
+    ['Seed',scene.seed],['Pieces',`${pc.length}/${result.placed.length}`],
+    ['Grid cells',totalCells],['Connections',connections.length],
+    ['Magnets',result.magCount],['Ma removed',result.maRem],['Trimmed',result.trimN],
+    ['Time',result.elapsed.toFixed(1)+'ms'],['Input tokens','~'+it],
+    ['Savings',`~${Math.round((1-it/(totalCells*10))*100)}%`],
+  ].map(([k,v])=>`<div class="st"><span class="sk">${k}</span><span class="sv">${v}</span></div>`).join('');
+}
+
+initThree();
+(function animate(){requestAnimationFrame(animate);ren.render(sc3,cam)})();
+setTimeout(run,300);
+</script>
+</body>
+</html>

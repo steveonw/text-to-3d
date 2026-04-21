@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Forest Shrine — Drop Grid v6</title>
+<style>*{margin:0;padding:0}body{overflow:hidden;background:#1a1a2a}canvas{display:block}
+#info{position:fixed;bottom:12px;left:12px;color:#8a9a7a;font:11px/1.4 'Courier New',monospace;background:rgba(0,0,0,0.6);padding:8px 12px;border-radius:4px;pointer-events:none}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="info">Forest Shrine · 46 pieces · Story → Solve → ASCII → Render · Drag to orbit</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// Solver output — 46 pieces from pass 3
+const D=[{"t": "campfire", "x": 14.5, "z": 12.5, "r": 0, "label": "altar"}, {"t": "road", "x": 14.5, "z": 17.5, "r": 1, "label": "path_0"}, {"t": "road", "x": 14.5, "z": 18.5, "r": 1, "label": "path_1"}, {"t": "road", "x": 14.5, "z": 19.5, "r": 1, "label": "path_2"}, {"t": "road", "x": 14.5, "z": 20.5, "r": 1, "label": "path_3"}, {"t": "road", "x": 14.5, "z": 21.5, "r": 1, "label": "path_4"}, {"t": "road", "x": 14.5, "z": 22.5, "r": 1, "label": "path_5"}, {"t": "road", "x": 14.5, "z": 23.5, "r": 1, "label": "path_6"}, {"t": "road", "x": 14.5, "z": 24.5, "r": 1, "label": "path_7"}, {"t": "road", "x": 14.5, "z": 25.5, "r": 1, "label": "path_8"}, {"t": "road", "x": 15.5, "z": 25.5, "r": 0, "label": "path_9"}, {"t": "road", "x": 16.5, "z": 25.5, "r": 0, "label": "path_10"}, {"t": "road", "x": 17.5, "z": 25.5, "r": 0, "label": "path_11"}, {"t": "road", "x": 18.5, "z": 25.5, "r": 0, "label": "path_12"}, {"t": "road", "x": 19.5, "z": 25.5, "r": 0, "label": "path_13"}, {"t": "lantern", "x": 16.5, "z": 17.5, "r": 0, "label": "lanterns_0"}, {"t": "lantern", "x": 16.5, "z": 19.5, "r": 0, "label": "lanterns_1"}, {"t": "lantern", "x": 16.5, "z": 21.5, "r": 0, "label": "lanterns_2"}, {"t": "lantern", "x": 16.5, "z": 23.5, "r": 0, "label": "lanterns_3"}, {"t": "lantern", "x": 13.5, "z": 25.5, "r": 0, "label": "lanterns_4"}, {"t": "lantern", "x": 16.5, "z": 26.5, "r": 0, "label": "lanterns_5"}, {"t": "tree", "x": 15.5, "z": 19.5, "r": 1, "label": "forest_0"}, {"t": "tree", "x": 8.5, "z": 16.5, "r": 0, "label": "forest_1"}, {"t": "tree", "x": 8.5, "z": 8.5, "r": 0, "label": "forest_2"}, {"t": "tree", "x": 14.5, "z": 5.5, "r": 1, "label": "forest_3"}, {"t": "tree", "x": 20.5, "z": 8.5, "r": 0, "label": "forest_4"}, {"t": "tree", "x": 20.5, "z": 16.5, "r": 0, "label": "forest_5"}, {"t": "tree", "x": 15.5, "z": 20.5, "r": 1, "label": "forest_6"}, {"t": "tree", "x": 8.5, "z": 17.5, "r": 0, "label": "forest_7"}, {"t": "tree", "x": 7.5, "z": 8.5, "r": 0, "label": "forest_8"}, {"t": "tree", "x": 14.5, "z": 4.5, "r": 1, "label": "forest_9"}, {"t": "tree", "x": 21.5, "z": 8.5, "r": 0, "label": "forest_10"}, {"t": "tree", "x": 20.5, "z": 17.5, "r": 0, "label": "forest_11"}, {"t": "log", "x": 17.5, "z": 17.5, "r": 1, "label": "logs_0"}, {"t": "log", "x": 17.5, "z": 21.5, "r": 1, "label": "logs_1"}, {"t": "log", "x": 12.5, "z": 25.5, "r": 1, "label": "logs_2"}, {"t": "fence", "x": 13.5, "z": 19.5, "r": 1, "label": "stones_0"}, {"t": "fence", "x": 9.5, "z": 17.5, "r": 0, "label": "stones_1"}, {"t": "fence", "x": 7.5, "z": 12.5, "r": 0, "label": "stones_2"}, {"t": "fence", "x": 9.5, "z": 7.5, "r": 1, "label": "stones_3"}, {"t": "fence", "x": 15.5, "z": 5.5, "r": 1, "label": "stones_4"}, {"t": "fence", "x": 19.5, "z": 7.5, "r": 0, "label": "stones_5"}, {"t": "fence", "x": 21.5, "z": 12.5, "r": 0, "label": "stones_6"}, {"t": "fence", "x": 18.5, "z": 17.5, "r": 0, "label": "stones_7"}, {"t": "rubble", "x": 26.5, "z": 12.5, "r": 0, "label": "offerings_0"}, {"t": "rubble", "x": 2.5, "z": 15.5, "r": 0, "label": "offerings_1"}];
+
+// Scene setup
+const canvas=document.getElementById('cv');
+const scene=new THREE.Scene();
+const cam=new THREE.PerspectiveCamera(50,innerWidth/innerHeight,0.1,200);
+const ren=new THREE.WebGLRenderer({canvas,antialias:true});
+ren.setSize(innerWidth,innerHeight);
+ren.setPixelRatio(Math.min(devicePixelRatio,2));
+ren.shadowMap.enabled=true;
+ren.shadowMap.type=THREE.PCFSoftShadowMap;
+ren.toneMapping=THREE.ACESFilmicToneMapping;
+ren.toneMappingExposure=0.9;
+
+// Forest atmosphere — dark blue-green sky, thick fog
+scene.background=new THREE.Color(0x1a2a1a);
+scene.fog=new THREE.FogExp2(0x1a2a1a,0.025);
+
+// Lighting — dappled forest light
+scene.add(new THREE.AmbientLight(0x334433,0.4));
+const sun=new THREE.DirectionalLight(0xeeddaa,0.8);
+sun.position.set(5,20,-3);sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);
+const sc=sun.shadow.camera;sc.near=0.5;sc.far=50;sc.left=-18;sc.right=18;sc.top=18;sc.bottom=-18;
+scene.add(sun);
+scene.add(new THREE.HemisphereLight(0x445544,0x332211,0.5));
+// Warm fill from the altar fire
+const warmFill=new THREE.PointLight(0xff8844,0.6,15);
+warmFill.position.set(14.5,1.5,12.5);
+scene.add(warmFill);
+
+// Seeded RNG
+let seed=777;
+function rng(){seed=(seed*1664525+1013904223)&0x7fffffff;return seed/0x7fffffff}
+
+function add(geo,color,x,y,z,opts={}){
+  const mat=new THREE.MeshStandardMaterial({color,roughness:opts.rough??0.85,metalness:opts.metal??0.05});
+  if(opts.emissive){mat.emissive=new THREE.Color(opts.emissive);mat.emissiveIntensity=opts.emissiveI??0.5}
+  if(opts.transparent){mat.transparent=true;mat.opacity=opts.opacity??0.7}
+  const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);
+  if(opts.ry)m.rotation.y=opts.ry;if(opts.rx)m.rotation.x=opts.rx;if(opts.rz)m.rotation.z=opts.rz;
+  m.castShadow=true;m.receiveShadow=true;scene.add(m);return m;
+}
+
+// Ground — dark forest floor
+const groundGeo=new THREE.PlaneGeometry(32,32,20,20);
+const gPos=groundGeo.attributes.position;
+for(let i=0;i<gPos.count;i++){
+  const x=gPos.getX(i),y=gPos.getY(i);
+  gPos.setZ(i,Math.sin(x*0.5)*Math.cos(y*0.4)*0.12+Math.sin(x*1.5+y)*0.04);
+}
+groundGeo.computeVertexNormals();
+add(groundGeo,0x2a3a22,15,-0.02,15,{rx:-Math.PI/2,rough:1});
+
+// Moss and leaf litter
+for(let i=0;i<30;i++){
+  const s=0.5+rng()*1.5;
+  add(new THREE.CircleGeometry(s/2,6),rng()>0.5?0x1a2a15:0x2a3a1a,
+    2+rng()*28,0.005,2+rng()*28,{rx:-Math.PI/2,rough:1});
+}
+
+// Grass tufts
+const grassGeo=new THREE.ConeGeometry(0.03,0.12,3);
+const grassMat=new THREE.MeshStandardMaterial({color:0x2a4a1e,roughness:1});
+const grassInst=new THREE.InstancedMesh(grassGeo,grassMat,400);
+const dummy=new THREE.Object3D();
+for(let i=0;i<400;i++){
+  dummy.position.set(rng()*30,0.06,rng()*30);
+  dummy.rotation.set(0,rng()*Math.PI,(rng()-0.5)*0.3);
+  dummy.scale.setScalar(0.3+rng()*1.5);
+  dummy.updateMatrix();
+  grassInst.setMatrixAt(i,dummy.matrix);
+}
+scene.add(grassInst);
+
+// Generators
+const GEN={
+  campfire(p){
+    // Stone altar — flat stone slab with offerings
+    add(new THREE.CylinderGeometry(0.9,1.1,0.5,8),0x6a6a60,p.x,0.25,p.z,{rough:0.95});
+    add(new THREE.CylinderGeometry(0.6,0.7,0.3,6),0x7a7a6e,p.x,0.55,p.z);
+    // Carved groove on top
+    add(new THREE.TorusGeometry(0.35,0.03,4,12),0x5a5a50,p.x,0.72,p.z,{rx:Math.PI/2});
+    // Small sacred flame
+    add(new THREE.ConeGeometry(0.12,0.35,5),0xff6622,p.x,0.9,p.z,{emissive:0xff4400,emissiveI:1.0});
+    add(new THREE.ConeGeometry(0.07,0.2,4),0xffaa44,p.x+0.03,0.82,p.z-0.02,{emissive:0xff8800,emissiveI:0.8});
+    // Surrounding stones
+    for(let i=0;i<5;i++){
+      const a=i/5*Math.PI*2;
+      add(new THREE.SphereGeometry(0.12+rng()*0.08,5,4),0x5a5a50,
+        p.x+Math.cos(a)*0.85,0.12,p.z+Math.sin(a)*0.85);
+    }
+  },
+
+  road(p){
+    // Mossy stepping stones
+    const s=0.3+rng()*0.2;
+    const colors=[0x5a5a50,0x4a5a48,0x5a6a55];
+    add(new THREE.CylinderGeometry(s,s+0.05,0.07,6),colors[Math.floor(rng()*3)],
+      p.x+(rng()-0.5)*0.2,0.035,p.z+(rng()-0.5)*0.2,{ry:rng()*3,rough:0.95});
+    // Moss on stone
+    if(rng()>0.4){
+      add(new THREE.CircleGeometry(s*0.6,5),0x3a5a2a,
+        p.x+(rng()-0.5)*0.15,0.075,p.z+(rng()-0.5)*0.15,{rx:-Math.PI/2,rough:1});
+    }
+    // Dirt path under stone
+    add(new THREE.CircleGeometry(0.5,6),0x2a2a1a,p.x,0.004,p.z,{rx:-Math.PI/2,rough:1});
+  },
+
+  lantern(p){
+    // Stone lantern — Japanese-style toro
+    const x=p.x,z=p.z;
+    // Base
+    add(new THREE.CylinderGeometry(0.2,0.25,0.15,6),0x6a6a5e,x,0.075,z);
+    // Pillar
+    add(new THREE.CylinderGeometry(0.06,0.07,0.7,6),0x7a7a6e,x,0.5,z);
+    // Light chamber
+    add(new THREE.BoxGeometry(0.25,0.25,0.25),0x8a8a7e,x,0.95,z);
+    // Warm glow inside
+    add(new THREE.SphereGeometry(0.08,6,4),0xffaa44,x,0.95,z,{emissive:0xff8833,emissiveI:1.2});
+    // Roof cap
+    add(new THREE.ConeGeometry(0.22,0.15,4),0x5a5a50,x,1.15,z,{ry:Math.PI/4});
+    // Point light
+    const light=new THREE.PointLight(0xff9944,0.15,4);
+    light.position.set(x,0.95,z);
+    scene.add(light);
+  },
+
+  tree(p){
+    const x=p.x,z=p.z;
+    const h=3.5+rng()*3;
+    const lean=(rng()-0.5)*0.04;
+    // Dark trunk
+    add(new THREE.CylinderGeometry(0.1,0.22,h,7),0x3a2a1a,x,h/2,z,{rz:lean,rough:1});
+    // Dense dark canopy — forest trees
+    const cr=1.0+rng()*0.7;
+    add(new THREE.SphereGeometry(cr,8,6),0x1a3a12,x,h+cr*0.3,z);
+    add(new THREE.SphereGeometry(cr*0.8,7,5),0x2a4a1a,x+0.25,h+cr*0.7,z-0.15);
+    add(new THREE.SphereGeometry(cr*0.6,6,4),0x1a3010,x-0.2,h+cr*0.1,z+0.2);
+    // Roots
+    for(let i=0;i<3;i++){
+      const ra=rng()*6.28;
+      add(new THREE.CylinderGeometry(0.01,0.07,0.6,4),0x3a2a1a,
+        x+Math.cos(ra)*0.25,0.05,z+Math.sin(ra)*0.25,{rx:Math.PI/3,ry:ra,rough:1});
+    }
+  },
+
+  log(p){
+    const x=p.x,z=p.z;
+    const a=rng()*Math.PI;
+    const len=0.8+rng()*0.6;
+    add(new THREE.CylinderGeometry(0.08,0.1,len,6),0x4a3a2a,x,0.1,z,{rx:Math.PI/2,ry:a,rough:1});
+    // Moss patches
+    add(new THREE.SphereGeometry(0.06,4,3),0x3a5a2a,x+(rng()-0.5)*0.2,0.15,z+(rng()-0.5)*0.2);
+    // Bark texture (small bumps)
+    for(let i=0;i<2;i++){
+      add(new THREE.SphereGeometry(0.03,3,2),0x3a2a18,
+        x+Math.cos(a)*0.2*(i-0.5),0.12,z+Math.sin(a)*0.2*(i-0.5));
+    }
+  },
+
+  fence(p){
+    // Standing stones — menhirs
+    const x=p.x,z=p.z;
+    const h=0.8+rng()*1.0;
+    const w=0.2+rng()*0.15;
+    const lean=(rng()-0.5)*0.08;
+    // Rough stone pillar
+    add(new THREE.BoxGeometry(w,h,w*0.7),0x6a6a5e,x,h/2,z,{ry:rng()*Math.PI,rz:lean,rough:0.95});
+    // Moss at base
+    add(new THREE.SphereGeometry(w*0.8,5,3),0x3a5a2a,x,0.08,z,{rough:1});
+    // Lichen patches
+    if(rng()>0.5){
+      add(new THREE.CircleGeometry(0.06,4),0x8a9a6a,
+        x+(rng()-0.5)*0.1,h*0.6,z+w*0.36,{ry:rng()*2});
+    }
+  },
+
+  rubble(p){
+    const x=p.x,z=p.z;
+    const n=3+Math.floor(rng()*3);
+    for(let i=0;i<n;i++){
+      const s=0.05+rng()*0.12;
+      add(rng()>0.5?new THREE.BoxGeometry(s,s*0.6,s):new THREE.SphereGeometry(s/2,4,3),
+        rng()>0.5?0x6a6a5e:0x5a5a48,
+        x+(rng()-0.5)*0.5,s*0.3,z+(rng()-0.5)*0.5,{ry:rng()*3,rough:0.95});
+    }
+  },
+};
+
+// Render all pieces
+for(const p of D){const gen=GEN[p.t];if(gen)gen(p)}
+
+// Camera orbit
+const cx=14.5,cz=18;
+let theta=Math.PI*0.25,phi=Math.PI/3.5,radius=22;
+const target=new THREE.Vector3(cx,1.5,cz);
+function updateCam(){
+  cam.position.set(
+    target.x+radius*Math.sin(phi)*Math.cos(theta),
+    target.y+radius*Math.cos(phi),
+    target.z+radius*Math.sin(phi)*Math.sin(theta)
+  );
+  cam.lookAt(target);
+}
+updateCam();
+
+let dragging=false,px,py;
+canvas.addEventListener('pointerdown',e=>{dragging=true;px=e.clientX;py=e.clientY});
+addEventListener('pointermove',e=>{if(!dragging)return;theta+=(e.clientX-px)*0.008;
+  phi=Math.max(0.15,Math.min(1.45,phi+(e.clientY-py)*0.008));px=e.clientX;py=e.clientY;updateCam()});
+addEventListener('pointerup',()=>dragging=false);
+canvas.addEventListener('wheel',e=>{radius=Math.max(6,Math.min(50,radius+e.deltaY*0.03));updateCam()},{passive:true});
+addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();ren.setSize(innerWidth,innerHeight)});
+
+// Animate fire flicker
+let time=0;
+(function animate(){
+  requestAnimationFrame(animate);
+  time+=0.05;
+  warmFill.intensity=0.5+Math.sin(time*3)*0.15+Math.sin(time*7)*0.05;
+  ren.render(scene,cam);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+# TODO: context_exporter.py
+#
+# STATUS: Not implemented. Placeholder only.
+#
+# Purpose: Given a solved scene, produce a per-piece context packet
+# describing what's near each piece, so Claude can author geometry
+# in context rather than in isolation.
+#
+# The solver (scripts/dropgrid/solver.py) already computes adjacency
+# and positions internally. This module's job is to surface that as
+# an explicit export.
+#
+# Read scripts/authoring/README.md before implementing.
+# Read references/philosophy.md for why this matters.
+#
+# Proposed API:
+#
+#   from dropgrid.api import solve_object_scene
+#   from authoring.context_exporter import export_all_contexts
+#
+#   result = solve_object_scene(dsl_text)
+#   contexts = export_all_contexts(result, neighbors=5)
+#   # contexts[piece_id] = {
+#   #   "self": {type, label, position, roles, ...},
+#   #   "neighbors": [{type, label, distance, direction}, ...],
+#   #   "on_path": True/False,
+#   #   "on_edge": True/False,
+#   #   "interior": True/False,
+#   #   ...
+#   # }
+#
+# Estimated effort: ~half a day.
+#
+# When this file is implemented, rename to context_exporter.py
+# (remove the .TODO suffix).
+
+raise NotImplementedError(
+    "context_exporter is not yet implemented. "
+    "See scripts/authoring/README.md for the design spec."
+)

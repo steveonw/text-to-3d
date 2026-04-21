@@ -1,0 +1,50 @@
+# TODO: authoring_guide.md
+#
+# STATUS: Not written. Placeholder only.
+#
+# Purpose: Teach Claude how to produce *good-looking* geometry per piece,
+# given that piece's local context. The craft guide for the toddler-with-blocks
+# approach.
+#
+# This document should cover:
+#
+# 1. Reading a context packet
+#    - What to notice in the neighbor list
+#    - How "edge" vs "interior" should change the geometry
+#    - What "facing" information means for orientation
+#
+# 2. Primitive vocabulary and composition patterns
+#    - Cross-reference threejs-conventions.md
+#    - Common block arrangements: tree (trunk + foliage), chair (seat + back + legs),
+#      wall segment, fence post, etc. TEACHING examples, not templates.
+#    - Footprint discipline: your primitives must fit within the piece's cell size
+#
+# 3. Contextual variation — the actual craft
+#    - "Tree near path" vs "tree deep in forest" — what changes
+#    - "Chair at head of table" vs "chair on side" — what changes
+#    - "Wall corner" vs "wall middle" — what changes
+#    - Pattern: observe context, pick ONE thing to vary, make the small choice
+#
+# 4. Anti-patterns to avoid
+#    - Reusing exact primitive sequences across pieces
+#    - Ignoring the context packet ("just make a tree")
+#    - Over-varying (each piece wildly different — becomes noise)
+#    - Under-varying (minor rotation tweaks only — stamping in disguise)
+#
+# 5. When fallback is appropriate
+#    - Claude can't meaningfully vary every piece on every scene
+#    - Which kinds of pieces benefit most from per-piece authoring (trees,
+#      props, anything with visible individuality) vs which don't (tiled
+#      floor cells, identical paving stones — here reuse is okay)
+#
+# BLOCKED ON: the geometry authoring protocol existing. This guide should
+# reference the actual schema from scripts/authoring/geometry_receiver.py,
+# which isn't built yet. Write this guide after that module lands.
+#
+# See also:
+#   - references/philosophy.md (why we author in context)
+#   - references/threejs-conventions.md (primitive vocabulary)
+#   - references/worked_examples/full_loop_example.md (also TODO)
+
+# When this file is written, rename to authoring_guide.md
+# (remove the .TODO suffix).

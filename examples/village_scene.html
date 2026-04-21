@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Village Scene — Drop Grid v6</title>
+<style>*{margin:0;padding:0}body{overflow:hidden;background:#2a2a3a}canvas{display:block}
+#info{position:fixed;bottom:12px;left:12px;color:#aaa;font:11px/1.4 'Courier New',monospace;background:rgba(0,0,0,0.5);padding:8px 12px;border-radius:4px;pointer-events:none}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="info">Village — Drop Grid v6 solver output · Drag to orbit · Scroll to zoom</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════
+// SOLVER OUTPUT — Pass 3 village (well + barn + fence + path)
+// 40 pieces, 33 connections, seed 42
+// ═══════════════════════════════════════════════════════════
+const D={"g":{"w":30,"d":30},"p":[{"t":"barn","x":20.41,"z":8.5,"r":3,"n":0,"v":"isolated"},{"t":"well","x":14.61,"z":12.38,"r":2,"n":0,"v":"isolated"},{"t":"road","x":15.65,"z":6.61,"r":0,"n":14,"v":"NES"},{"t":"road","x":15.76,"z":5.57,"r":3,"n":10,"v":"NS"},{"t":"road","x":15.76,"z":7.47,"r":1,"n":6,"v":"NS"},{"t":"road","x":16.5,"z":4.5,"r":0,"n":2,"v":"S"},{"t":"road","x":16.5,"z":3.5,"r":3,"n":0,"v":"isolated"},{"t":"road","x":16.5,"z":2.5,"r":2,"n":0,"v":"isolated"},{"t":"road","x":16.5,"z":1.5,"r":1,"n":0,"v":"isolated"},{"t":"road","x":15.65,"z":8.53,"r":2,"n":8,"v":"N"},{"t":"road","x":14.5,"z":9.5,"r":3,"n":0,"v":"isolated"},{"t":"fence","x":24.71,"z":5.47,"r":-0.79,"n":0,"v":"isolated"},{"t":"fence","x":25.59,"z":9.32,"r":-1.57,"n":2,"v":"S"},{"t":"fence","x":18.5,"z":13.5,"r":3.14,"n":0,"v":"isolated"},{"t":"fence","x":17.3,"z":6.5,"r":2.36,"n":4,"v":"E"},{"t":"fence","x":18.43,"z":6.5,"r":2.36,"n":12,"v":"WE"},{"t":"fence","x":19.38,"z":4.62,"r":3.14,"n":0,"v":"isolated"},{"t":"fence","x":22.5,"z":4.5,"r":3.14,"n":0,"v":"isolated"},{"t":"fence","x":25.59,"z":10.44,"r":-1.57,"n":8,"v":"N"},{"t":"fence","x":18.5,"z":12.5,"r":3.14,"n":0,"v":"isolated"},{"t":"fence","x":18.3,"z":5.5,"r":2.36,"n":0,"v":"isolated"},{"t":"fence","x":24.59,"z":13.32,"r":-0.79,"n":0,"v":"isolated"},{"t":"hay","x":25.5,"z":7.5,"r":0,"n":0,"v":"isolated"},{"t":"hay","x":22.5,"z":10.5,"r":0,"n":0,"v":"isolated"},{"t":"house","x":8.44,"z":13.37,"r":0,"n":0,"v":"isolated"},{"t":"house","x":14.53,"z":5.5,"r":0,"n":0,"v":"isolated"},{"t":"house","x":10.5,"z":18.5,"r":0,"n":0,"v":"isolated"},{"t":"house","x":18.67,"z":18.39,"r":0,"n":0,"v":"isolated"},{"t":"house","x":10.5,"z":19.5,"r":0,"n":0,"v":"isolated"},{"t":"tree","x":11.82,"z":12.28,"r":0,"n":0,"v":"isolated"},{"t":"tree","x":5.5,"z":15.5,"r":0,"n":0,"v":"isolated"},{"t":"tree","x":16.5,"z":16.5,"r":0,"n":0,"v":"isolated"},{"t":"tree","x":9.5,"z":20.5,"r":0,"n":0,"v":"isolated"},{"t":"tree","x":5.5,"z":25.5,"r":0,"n":0,"v":"isolated"},{"t":"tree","x":24.5,"z":25.5,"r":0,"n":0,"v":"isolated"},{"t":"rubble","x":12.5,"z":5.5,"r":0,"n":0,"v":"isolated"},{"t":"rubble","x":12.5,"z":6.5,"r":0,"n":0,"v":"isolated"},{"t":"rubble","x":17.5,"z":7.5,"r":0,"n":0,"v":"isolated"}],"c":[{"ax":15.65,"az":6.61,"bx":15.76,"bz":5.57,"t":"road"},{"ax":15.65,"az":6.61,"bx":15.76,"bz":7.47,"t":"road"},{"ax":15.65,"az":6.61,"bx":16.5,"bz":5.57,"t":"road"},{"ax":15.76,"az":5.57,"bx":16.5,"bz":4.5,"t":"road"},{"ax":15.76,"az":5.57,"bx":15.76,"bz":7.47,"t":"road"},{"ax":15.76,"az":7.47,"bx":15.65,"bz":8.53,"t":"road"},{"ax":16.5,"az":4.5,"bx":16.5,"bz":3.5,"t":"road"},{"ax":16.5,"az":3.5,"bx":16.5,"bz":2.5,"t":"road"},{"ax":16.5,"az":2.5,"bx":16.5,"bz":1.5,"t":"road"},{"ax":25.59,"az":9.32,"bx":25.59,"bz":10.44,"t":"fence"},{"ax":17.3,"az":6.5,"bx":18.43,"bz":6.5,"t":"fence"},{"ax":18.43,"az":6.5,"bx":18.3,"bz":5.5,"t":"fence"},{"ax":18.43,"az":6.5,"bx":19.38,"bz":4.62,"t":"fence"}]};
+
+const GW=D.g.w, GD=D.g.d;
+
+// ═══════════════════════════════════════════════════════════
+// SEEDED RNG
+// ═══════════════════════════════════════════════════════════
+let seed=777;
+function rng(){seed=(seed*1664525+1013904223)&0x7fffffff;return seed/0x7fffffff}
+
+// ═══════════════════════════════════════════════════════════
+// SCENE SETUP
+// ═══════════════════════════════════════════════════════════
+const canvas=document.getElementById('cv');
+const scene=new THREE.Scene();
+const cam=new THREE.PerspectiveCamera(50,innerWidth/innerHeight,0.1,200);
+const ren=new THREE.WebGLRenderer({canvas,antialias:true});
+ren.setSize(innerWidth,innerHeight);
+ren.setPixelRatio(Math.min(devicePixelRatio,2));
+ren.shadowMap.enabled=true;
+ren.shadowMap.type=THREE.PCFSoftShadowMap;
+ren.toneMapping=THREE.ACESFilmicToneMapping;
+ren.toneMappingExposure=1.1;
+
+// Sky gradient
+scene.background=new THREE.Color(0x87CEEB);
+scene.fog=new THREE.FogExp2(0x9ab8c2,0.018);
+
+// ═══════════════════════════════════════════════════════════
+// LIGHTING — warm afternoon sun
+// ═══════════════════════════════════════════════════════════
+scene.add(new THREE.AmbientLight(0x8899aa,0.5));
+const sun=new THREE.DirectionalLight(0xffeedd,1.3);
+sun.position.set(10,18,-8);sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);
+const sc=sun.shadow.camera;sc.near=0.5;sc.far=60;sc.left=-20;sc.right=20;sc.top=20;sc.bottom=-20;
+scene.add(sun);
+scene.add(new THREE.HemisphereLight(0x88aacc,0x445522,0.4));
+// Warm fill
+const fill=new THREE.DirectionalLight(0xddaa77,0.3);
+fill.position.set(-8,5,10);scene.add(fill);
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
+function add(geo,color,x,y,z,opts={}){
+  const mat=new THREE.MeshStandardMaterial({color,roughness:opts.rough??0.85,metalness:opts.metal??0.05});
+  if(opts.emissive){mat.emissive=new THREE.Color(opts.emissive);mat.emissiveIntensity=opts.emissiveI??0.5}
+  const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);
+  if(opts.ry)m.rotation.y=opts.ry;if(opts.rx)m.rotation.x=opts.rx;if(opts.rz)m.rotation.z=opts.rz;
+  m.castShadow=true;m.receiveShadow=true;scene.add(m);return m;
+}
+
+// ═══════════════════════════════════════════════════════════
+// GROUND — textured with variation
+// ═══════════════════════════════════════════════════════════
+const groundGeo=new THREE.PlaneGeometry(GW+4,GD+4,24,24);
+// Gentle terrain undulation
+const gPos=groundGeo.attributes.position;
+for(let i=0;i<gPos.count;i++){
+  const x=gPos.getX(i),y=gPos.getY(i);
+  const h=Math.sin(x*0.4)*Math.cos(y*0.3)*0.15+Math.sin(x*1.2+y*0.8)*0.05;
+  gPos.setZ(i,h);
+}
+groundGeo.computeVertexNormals();
+const ground=add(groundGeo,0x4a6a3a,GW/2,-0.02,GD/2,{rx:-Math.PI/2,rough:1});
+
+// Dirt patches scattered
+for(let i=0;i<25;i++){
+  const s=0.8+rng()*2;
+  add(new THREE.PlaneGeometry(s,s),rng()>0.5?0x3a3520:0x4a4530,
+    2+rng()*(GW-4),0.005,2+rng()*(GD-4),{rx:-Math.PI/2,ry:rng()*6.28,rough:1});
+}
+
+// Grass tufts — instanced for performance
+const grassGeo=new THREE.ConeGeometry(0.04,0.15,3);
+const grassMat=new THREE.MeshStandardMaterial({color:0x3a5a28,roughness:1});
+const grassInst=new THREE.InstancedMesh(grassGeo,grassMat,300);
+const dummy=new THREE.Object3D();
+for(let i=0;i<300;i++){
+  dummy.position.set(rng()*GW,0.07,rng()*GD);
+  dummy.rotation.set(0,rng()*Math.PI,(rng()-0.5)*0.3);
+  dummy.scale.setScalar(0.4+rng()*1.2);
+  dummy.updateMatrix();
+  grassInst.setMatrixAt(i,dummy.matrix);
+}
+scene.add(grassInst);
+
+// ═══════════════════════════════════════════════════════════
+// GENERATORS — one per type
+// ═══════════════════════════════════════════════════════════
+const GEN={
+  barn(p){
+    const x=p.x,z=p.z,da=p.r;
+    // Main structure
+    add(new THREE.BoxGeometry(3.5,2.5,2.5),0x7a3a2a,x,1.25,z,{ry:da});
+    // Roof
+    add(new THREE.ConeGeometry(2.4,1.3,4),0x5a2a1a,x,2.9,z,{ry:da+Math.PI/4});
+    // Door
+    add(new THREE.BoxGeometry(0.9,1.5,0.08),0x4a2a15,x+Math.sin(da)*1.26,0.75,z+Math.cos(da)*1.26,{ry:da});
+    // Window
+    add(new THREE.BoxGeometry(0.35,0.35,0.06),0x6688aa,x+Math.sin(da+Math.PI/2)*1.2,1.4,z+Math.cos(da+Math.PI/2)*1.2,{ry:da+Math.PI/2});
+    // Log details
+    for(let i=0;i<3;i++){
+      const h=0.3+i*0.8;
+      add(new THREE.BoxGeometry(3.6,0.08,0.08),0x6a2a18,x,h,z+1.26,{ry:da});
+      add(new THREE.BoxGeometry(3.6,0.08,0.08),0x6a2a18,x,h,z-1.26,{ry:da});
+    }
+  },
+
+  well(p){
+    const x=p.x,z=p.z;
+    // Stone cylinder
+    add(new THREE.CylinderGeometry(0.75,0.85,0.75,10),0x8a8a7e,x,0.37,z);
+    // Inner dark
+    add(new THREE.CylinderGeometry(0.6,0.6,0.1,10),0x1a1a1a,x,0.76,z);
+    // Posts
+    add(new THREE.CylinderGeometry(0.04,0.04,1.3,6),0x5c4a3a,x-0.4,1.0,z);
+    add(new THREE.CylinderGeometry(0.04,0.04,1.3,6),0x5c4a3a,x+0.4,1.0,z);
+    // Crossbar
+    add(new THREE.BoxGeometry(0.95,0.06,0.06),0x5c4a3a,x,1.65,z);
+    // Roof
+    add(new THREE.ConeGeometry(0.7,0.4,4),0x6a4a3a,x,1.9,z,{ry:Math.PI/4});
+    // Bucket (tiny)
+    add(new THREE.CylinderGeometry(0.08,0.06,0.1,6),0x4a4a4e,x,0.8,z+0.15,{metal:0.3});
+  },
+
+  road(p){
+    const x=p.x,z=p.z;
+    const hasN=p.n>0;
+    const sw=hasN?0.75:0.45, sd=hasN?0.75:0.45;
+    const colors=[0x7a7a6e,0x6a6a5e,0x8a8a7e];
+    add(new THREE.BoxGeometry(sw,0.06,sd),colors[Math.floor(rng()*3)],x,0.03,z,{ry:rng()*0.4,rough:0.95});
+    // Secondary stone
+    if(rng()>0.3){
+      add(new THREE.BoxGeometry(0.2+rng()*0.15,0.05,0.2+rng()*0.15),colors[Math.floor(rng()*3)],
+        x+(rng()-0.5)*0.5,0.025,z+(rng()-0.5)*0.5,{ry:rng()*1.5,rough:0.95});
+    }
+    // Dirt underneath
+    add(new THREE.PlaneGeometry(1.0,1.0),0x3a3520,x,0.006,z,{rx:-Math.PI/2,ry:rng()*0.3,rough:1});
+  },
+
+  fence(p){
+    const x=p.x,z=p.z;
+    // Wooden post — square
+    add(new THREE.BoxGeometry(0.1,1.1,0.1),0x6a5a4a,x,0.55,z);
+    // Post cap
+    add(new THREE.ConeGeometry(0.06,0.12,4),0x5a4a3a,x,1.15,z,{ry:Math.PI/4});
+  },
+
+  hay(p){
+    const x=p.x,z=p.z;
+    // Round hay bale
+    add(new THREE.CylinderGeometry(0.55,0.55,0.5,12),0xbaa840,x,0.25,z);
+    add(new THREE.CylinderGeometry(0.5,0.55,0.05,12),0xa89830,x,0.52,z);
+    // Straw wisps
+    for(let i=0;i<4;i++){
+      const a=rng()*6.28;
+      add(new THREE.BoxGeometry(0.02,0.01,0.15),0xc8b848,x+Math.cos(a)*0.5,0.1+rng()*0.3,z+Math.sin(a)*0.5,{ry:a});
+    }
+  },
+
+  house(p){
+    const x=p.x,z=p.z,da=p.r;
+    const w=1.8,d=1.6,h=1.7;
+    // Walls — warm wood
+    add(new THREE.BoxGeometry(w,h,d),0x9a7a55,x,h/2,z,{ry:da});
+    // Roof
+    add(new THREE.ConeGeometry(w*0.78,1.0,4),0x6a4a3a,x,h+0.5,z,{ry:da+Math.PI/4});
+    // Door
+    add(new THREE.BoxGeometry(0.4,0.95,0.06),0x4a3020,x+Math.sin(da)*d/2,0.47,z+Math.cos(da)*d/2,{ry:da});
+    // Windows (two, on side walls)
+    add(new THREE.BoxGeometry(0.3,0.3,0.06),0x6688aa,x+Math.sin(da+Math.PI/2)*w/2*0.7,1.1,z+Math.cos(da+Math.PI/2)*d/2*0.7,{ry:da+Math.PI/2});
+    add(new THREE.BoxGeometry(0.3,0.3,0.06),0x6688aa,x+Math.sin(da-Math.PI/2)*w/2*0.7,1.1,z+Math.cos(da-Math.PI/2)*d/2*0.7,{ry:da-Math.PI/2});
+    // Chimney
+    add(new THREE.BoxGeometry(0.2,0.5,0.2),0x6a6a60,x+(rng()-0.5)*0.5,h+0.8,z+(rng()-0.5)*0.3);
+    // Foundation stone
+    add(new THREE.BoxGeometry(w+0.1,0.12,d+0.1),0x7a7a6e,x,0.06,z,{ry:da});
+  },
+
+  tree(p){
+    const x=p.x,z=p.z;
+    const h=2.5+rng()*2;
+    const lean=(rng()-0.5)*0.06;
+    // Trunk
+    add(new THREE.CylinderGeometry(0.08,0.18,h,7),0x5c4a3a,x,h/2,z,{rz:lean,rough:1});
+    // Canopy — layered spheres for fullness
+    const cr=0.8+rng()*0.5;
+    add(new THREE.SphereGeometry(cr,8,6),0x2d5a1e,x,h+cr*0.4,z);
+    add(new THREE.SphereGeometry(cr*0.7,7,5),0x3a6a2a,x+0.2,h+cr*0.8,z-0.1);
+    add(new THREE.SphereGeometry(cr*0.5,6,4),0x2a4a18,x-0.15,h+cr*0.2,z+0.2);
+    // Roots
+    for(let i=0;i<2;i++){
+      const ra=rng()*6.28;
+      add(new THREE.CylinderGeometry(0.01,0.06,0.5,4),0x5c4a3a,
+        x+Math.cos(ra)*0.22,0.06,z+Math.sin(ra)*0.22,{rx:Math.PI/3,ry:ra,rough:1});
+    }
+  },
+
+  rubble(p){
+    const x=p.x,z=p.z;
+    const n=2+Math.floor(rng()*3);
+    for(let i=0;i<n;i++){
+      const s=0.06+rng()*0.15;
+      add(rng()>0.5?new THREE.BoxGeometry(s,s*0.7,s):new THREE.SphereGeometry(s/2,5,4),
+        0x6a6a5e,x+(rng()-0.5)*0.5,s*0.35,z+(rng()-0.5)*0.5,{ry:rng()*3});
+    }
+  },
+};
+
+// ═══════════════════════════════════════════════════════════
+// RENDER PIECES
+// ═══════════════════════════════════════════════════════════
+for(const p of D.p){
+  const gen=GEN[p.t];
+  if(gen) gen(p);
+}
+
+// ═══════════════════════════════════════════════════════════
+// CONNECTIONS — fence rails, road connections
+// ═══════════════════════════════════════════════════════════
+for(const c of D.c){
+  const dx=c.bx-c.ax, dz=c.bz-c.az;
+  const dist=Math.sqrt(dx*dx+dz*dz);
+  if(dist<0.1||dist>5)continue;
+  const mx=(c.ax+c.bx)/2, mz=(c.az+c.bz)/2;
+  const angle=Math.atan2(dx,dz);
+
+  if(c.t==='fence'){
+    // Wooden rails between fence posts
+    add(new THREE.BoxGeometry(dist,0.06,0.05),0x6a5a4a,mx,0.85,mz,{ry:angle});
+    add(new THREE.BoxGeometry(dist,0.06,0.05),0x6a5a4a,mx,0.35,mz,{ry:angle});
+    // Pickets
+    const count=Math.max(2,Math.floor(dist/0.25));
+    for(let i=1;i<count;i++){
+      const t=i/count;
+      const px=c.ax+dx*t, pz=c.az+dz*t;
+      add(new THREE.BoxGeometry(0.03,0.7,0.03),0x5a4a3a,px,0.5,pz);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// CAMERA — orbit controls
+// ═══════════════════════════════════════════════════════════
+let theta=Math.PI*0.3,phi=Math.PI/3.2,radius=28;
+const target=new THREE.Vector3(GW/2,1,GD/2);
+function updateCam(){
+  cam.position.set(
+    target.x+radius*Math.sin(phi)*Math.cos(theta),
+    target.y+radius*Math.cos(phi),
+    target.z+radius*Math.sin(phi)*Math.sin(theta)
+  );
+  cam.lookAt(target);
+}
+updateCam();
+
+let dragging=false,px,py;
+canvas.addEventListener('pointerdown',e=>{dragging=true;px=e.clientX;py=e.clientY});
+addEventListener('pointermove',e=>{if(!dragging)return;theta+=(e.clientX-px)*0.008;
+  phi=Math.max(0.15,Math.min(1.45,phi+(e.clientY-py)*0.008));px=e.clientX;py=e.clientY;updateCam()});
+addEventListener('pointerup',()=>dragging=false);
+canvas.addEventListener('wheel',e=>{radius=Math.max(8,Math.min(60,radius+e.deltaY*0.03));updateCam()},{passive:true});
+addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();ren.setSize(innerWidth,innerHeight)});
+
+(function animate(){requestAnimationFrame(animate);ren.render(scene,cam)})();
+</script>
+</body>
+</html>

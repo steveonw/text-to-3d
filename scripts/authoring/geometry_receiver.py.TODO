@@ -1,0 +1,43 @@
+# TODO: geometry_receiver.py
+#
+# STATUS: Not implemented. Placeholder only.
+#
+# Purpose: Accept LLM-authored per-piece geometry packets and prepare
+# them for the scaffold to render. Define the authoring schema.
+#
+# Read scripts/authoring/README.md before implementing — there are
+# several design decisions still open (coordinate frame, material
+# vocabulary, batching model, fallback behavior).
+#
+# Proposed API:
+#
+#   from authoring.geometry_receiver import (
+#       receive_geometry,
+#       validate_packet,
+#       GeometryPacket,
+#   )
+#
+#   packet = {
+#       "piece_id": 7,
+#       "primitives": [
+#           {"shape": "cylinder", "dimensions": [0.2, 0.2, 1.5],
+#            "position": [0, 0.75, 0], "rotation": [0, 0, 0],
+#            "material": {"color": "#4a3520"}},
+#           ...
+#       ]
+#   }
+#   validate_packet(packet)  # raises if malformed
+#   receive_geometry(packet, scene_state)  # attaches to scene
+#
+# Positions are LOCAL to the piece's footprint center, not world
+# coordinates. The scaffold applies the solver's placement on top.
+#
+# Estimated effort: ~1 day including tests.
+#
+# When this file is implemented, rename to geometry_receiver.py
+# (remove the .TODO suffix).
+
+raise NotImplementedError(
+    "geometry_receiver is not yet implemented. "
+    "See scripts/authoring/README.md for the design spec."
+)
