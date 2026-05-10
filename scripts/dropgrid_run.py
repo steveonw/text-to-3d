@@ -105,7 +105,7 @@ RENDERER_TEMPLATE = '''<!DOCTYPE html>
 <body>
 <canvas id="cv"></canvas>
 <div id="info">{title} · {count} pieces · Drop Grid</div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="/vendor/three.r128.min.js"></script>
 <script>
 const D={pieces_json};
 const canvas=document.getElementById('cv');

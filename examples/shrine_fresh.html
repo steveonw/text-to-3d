@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Shrine — Drop Grid</title>
+<style>*{margin:0;padding:0}body{overflow:hidden;background:#1a2a1a}canvas{display:block}
+#info{position:fixed;bottom:12px;left:12px;color:#8a9a7a;font:11px/1.4 'Courier New',monospace;background:rgba(0,0,0,0.6);padding:8px 12px;border-radius:4px;pointer-events:none}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="info">Shrine · 47 pieces · Drop Grid</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const D=[{"t": "campfire", "x": 15.5, "z": 15.5, "r": 0, "label": "altar"}, {"t": "road", "x": 15.5, "z": 20.5, "r": 1, "label": "path_0"}, {"t": "road", "x": 15.5, "z": 21.5, "r": 1, "label": "path_1"}, {"t": "road", "x": 15.5, "z": 22.5, "r": 1, "label": "path_2"}, {"t": "road", "x": 15.5, "z": 23.5, "r": 1, "label": "path_3"}, {"t": "road", "x": 15.5, "z": 24.5, "r": 1, "label": "path_4"}, {"t": "road", "x": 15.5, "z": 25.5, "r": 1, "label": "path_5"}, {"t": "road", "x": 16.5, "z": 25.5, "r": 0, "label": "path_6"}, {"t": "road", "x": 17.5, "z": 25.5, "r": 0, "label": "path_7"}, {"t": "road", "x": 18.5, "z": 25.5, "r": 0, "label": "path_8"}, {"t": "road", "x": 19.5, "z": 25.5, "r": 0, "label": "path_9"}, {"t": "road", "x": 20.5, "z": 25.5, "r": 0, "label": "path_10"}, {"t": "road", "x": 21.5, "z": 25.5, "r": 0, "label": "path_11"}, {"t": "road", "x": 22.5, "z": 25.5, "r": 0, "label": "path_12"}, {"t": "road", "x": 23.5, "z": 25.5, "r": 0, "label": "path_13"}, {"t": "lantern", "x": 17.5, "z": 20.5, "r": 0, "label": "lanterns_0"}, {"t": "lantern", "x": 17.5, "z": 22.5, "r": 0, "label": "lanterns_1"}, {"t": "lantern", "x": 17.5, "z": 24.5, "r": 0, "label": "lanterns_2"}, {"t": "lantern", "x": 16.5, "z": 26.5, "r": 0, "label": "lanterns_3"}, {"t": "lantern", "x": 18.5, "z": 26.5, "r": 0, "label": "lanterns_4"}, {"t": "lantern", "x": 20.5, "z": 26.5, "r": 0, "label": "lanterns_5"}, {"t": "tree", "x": 16.5, "z": 22.5, "r": 1, "label": "forest_0"}, {"t": "tree", "x": 9.5, "z": 18.5, "r": 0, "label": "forest_1"}, {"t": "tree", "x": 9.5, "z": 12.5, "r": 0, "label": "forest_2"}, {"t": "tree", "x": 15.5, "z": 8.5, "r": 1, "label": "forest_3"}, {"t": "tree", "x": 21.5, "z": 11.5, "r": 0, "label": "forest_4"}, {"t": "tree", "x": 21.5, "z": 18.5, "r": 0, "label": "forest_5"}, {"t": "tree", "x": 16.5, "z": 23.5, "r": 1, "label": "forest_6"}, {"t": "tree", "x": 9.5, "z": 19.5, "r": 0, "label": "forest_7"}, {"t": "tree", "x": 8.5, "z": 12.5, "r": 0, "label": "forest_8"}, {"t": "tree", "x": 15.5, "z": 7.5, "r": 1, "label": "forest_9"}, {"t": "tree", "x": 22.5, "z": 11.5, "r": 0, "label": "forest_10"}, {"t": "tree", "x": 21.5, "z": 19.5, "r": 0, "label": "forest_11"}, {"t": "log", "x": 18.5, "z": 20.5, "r": 1, "label": "logs_0"}, {"t": "log", "x": 13.5, "z": 24.5, "r": 1, "label": "logs_1"}, {"t": "log", "x": 18.5, "z": 23.5, "r": 0, "label": "logs_2"}, {"t": "fence", "x": 14.5, "z": 22.5, "r": 1, "label": "stones_0"}, {"t": "fence", "x": 10.5, "z": 20.5, "r": 0, "label": "stones_1"}, {"t": "fence", "x": 8.5, "z": 15.5, "r": 0, "label": "stones_2"}, {"t": "fence", "x": 10.5, "z": 10.5, "r": 1, "label": "stones_3"}, {"t": "fence", "x": 16.5, "z": 8.5, "r": 1, "label": "stones_4"}, {"t": "fence", "x": 20.5, "z": 10.5, "r": 0, "label": "stones_5"}, {"t": "fence", "x": 22.5, "z": 15.5, "r": 0, "label": "stones_6"}, {"t": "fence", "x": 20.5, "z": 20.5, "r": 0, "label": "stones_7"}, {"t": "rubble", "x": 14.5, "z": 15.5, "r": 0, "label": "offerings_0"}, {"t": "rubble", "x": 21.5, "z": 15.5, "r": 0, "label": "offerings_1"}, {"t": "rubble", "x": 9.5, "z": 9.5, "r": 0, "label": "offerings_2"}];
+const canvas=document.getElementById('cv');
+const scene=new THREE.Scene();
+const cam=new THREE.PerspectiveCamera(50,innerWidth/innerHeight,0.1,200);
+const ren=new THREE.WebGLRenderer({canvas,antialias:true});
+ren.setSize(innerWidth,innerHeight);ren.setPixelRatio(Math.min(devicePixelRatio,2));
+ren.shadowMap.enabled=true;ren.shadowMap.type=THREE.PCFSoftShadowMap;
+ren.toneMapping=THREE.ACESFilmicToneMapping;ren.toneMappingExposure=0.95;
+scene.background=new THREE.Color(0x1a2a1a);
+scene.fog=new THREE.FogExp2(0x1a2a1a,0.02);
+scene.add(new THREE.AmbientLight(0x445544,0.5));
+const sun=new THREE.DirectionalLight(0xeeddaa,0.9);
+sun.position.set(8,18,-5);sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);scene.add(sun);
+scene.add(new THREE.HemisphereLight(0x445544,0x332211,0.4));
+let seed=777;function rng(){seed=(seed*1664525+1013904223)&0x7fffffff;return seed/0x7fffffff}
+function add(geo,color,x,y,z,opts={}){
+  const mat=new THREE.MeshStandardMaterial({color,roughness:opts.rough||0.85,metalness:opts.metal||0.05});
+  if(opts.emissive){mat.emissive=new THREE.Color(opts.emissive);mat.emissiveIntensity=opts.emissiveI||0.5}
+  const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);
+  if(opts.ry)m.rotation.y=opts.ry;if(opts.rx)m.rotation.x=opts.rx;if(opts.rz)m.rotation.z=opts.rz;
+  m.castShadow=true;m.receiveShadow=true;scene.add(m);return m;
+}
+// Ground
+const gg=new THREE.PlaneGeometry(34,34,16,16);
+const gp=gg.attributes.position;
+for(let i=0;i<gp.count;i++)gp.setZ(i,Math.sin(gp.getX(i)*0.5)*Math.cos(gp.getY(i)*0.4)*0.1);
+gg.computeVertexNormals();
+add(gg,0x2a3a22,15,-0.02,15,{rx:-Math.PI/2,rough:1});
+for(let i=0;i<25;i++){const s=0.5+rng()*1.5;add(new THREE.CircleGeometry(s/2,6),rng()>0.5?0x1a2a15:0x2a3a1a,2+rng()*28,0.005,2+rng()*28,{rx:-Math.PI/2})}
+const gi=new THREE.InstancedMesh(new THREE.ConeGeometry(0.03,0.12,3),new THREE.MeshStandardMaterial({color:0x2a4a1e,roughness:1}),300);
+const dm=new THREE.Object3D();
+for(let i=0;i<300;i++){dm.position.set(rng()*30,0.06,rng()*30);dm.rotation.set(0,rng()*3,(rng()-0.5)*0.3);dm.scale.setScalar(0.3+rng()*1.5);dm.updateMatrix();gi.setMatrixAt(i,dm.matrix)}
+scene.add(gi);
+const GEN={
+  campfire(p){add(new THREE.CylinderGeometry(0.9,1.1,0.5,8),0x6a6a60,p.x,0.25,p.z);add(new THREE.CylinderGeometry(0.6,0.7,0.3,6),0x7a7a6e,p.x,0.55,p.z);add(new THREE.TorusGeometry(0.35,0.03,4,12),0x5a5a50,p.x,0.72,p.z,{rx:Math.PI/2});add(new THREE.ConeGeometry(0.12,0.35,5),0xff6622,p.x,0.9,p.z,{emissive:0xff4400,emissiveI:1});for(let i=0;i<5;i++){const a=i/5*Math.PI*2;add(new THREE.SphereGeometry(0.1+rng()*0.08,5,4),0x5a5a50,p.x+Math.cos(a)*0.85,0.12,p.z+Math.sin(a)*0.85)};const l=new THREE.PointLight(0xff8844,0.6,15);l.position.set(p.x,1.5,p.z);scene.add(l)},
+  tower(p){add(new THREE.CylinderGeometry(1.2,1.5,4,8),0x6a6a5e,p.x,2,p.z);add(new THREE.ConeGeometry(1.6,1.5,8),0x5a4a3a,p.x,4.5,p.z);add(new THREE.BoxGeometry(0.5,1.2,0.06),0x4a3020,p.x,0.6,p.z+1.5)},
+  road(p){const s=0.3+rng()*0.2;add(new THREE.CylinderGeometry(s,s+0.05,0.07,6),[0x5a5a50,0x4a5a48,0x5a6a55][Math.floor(rng()*3)],p.x+(rng()-0.5)*0.2,0.035,p.z+(rng()-0.5)*0.2,{ry:rng()*3});add(new THREE.CircleGeometry(0.5,6),0x2a2a1a,p.x,0.004,p.z,{rx:-Math.PI/2})},
+  lantern(p){const x=p.x,z=p.z;add(new THREE.CylinderGeometry(0.2,0.25,0.15,6),0x6a6a5e,x,0.075,z);add(new THREE.CylinderGeometry(0.06,0.07,0.7,6),0x7a7a6e,x,0.5,z);add(new THREE.BoxGeometry(0.25,0.25,0.25),0x8a8a7e,x,0.95,z);add(new THREE.SphereGeometry(0.08,6,4),0xffaa44,x,0.95,z,{emissive:0xff8833,emissiveI:1.2});add(new THREE.ConeGeometry(0.22,0.15,4),0x5a5a50,x,1.15,z,{ry:Math.PI/4});const l=new THREE.PointLight(0xff9944,0.15,4);l.position.set(x,0.95,z);scene.add(l)},
+  tree(p){const x=p.x,z=p.z,h=3.5+rng()*3;add(new THREE.CylinderGeometry(0.1,0.22,h,7),0x3a2a1a,x,h/2,z,{rz:(rng()-0.5)*0.04});const cr=1+rng()*0.7;add(new THREE.SphereGeometry(cr,8,6),0x1a3a12,x,h+cr*0.3,z);add(new THREE.SphereGeometry(cr*0.8,7,5),0x2a4a1a,x+0.25,h+cr*0.7,z-0.15);add(new THREE.SphereGeometry(cr*0.6,6,4),0x1a3010,x-0.2,h+cr*0.1,z+0.2)},
+  log(p){const a=rng()*Math.PI,l=0.8+rng()*0.6;add(new THREE.CylinderGeometry(0.08,0.1,l,6),0x4a3a2a,p.x,0.1,p.z,{rx:Math.PI/2,ry:a});add(new THREE.SphereGeometry(0.06,4,3),0x3a5a2a,p.x+(rng()-0.5)*0.2,0.15,p.z+(rng()-0.5)*0.2)},
+  fence(p){const x=p.x,z=p.z,h=0.8+rng()*1,w=0.2+rng()*0.15;add(new THREE.BoxGeometry(w,h,w*0.7),0x6a6a5e,x,h/2,z,{ry:rng()*Math.PI,rz:(rng()-0.5)*0.08});add(new THREE.SphereGeometry(w*0.8,5,3),0x3a5a2a,x,0.08,z)},
+  wall(p){const x=p.x,z=p.z;add(new THREE.BoxGeometry(1,1.8,0.4),0x6a6a5e,x,0.9,z,{ry:p.r*Math.PI/2});add(new THREE.BoxGeometry(1.1,0.15,0.5),0x5a5a50,x,0,z,{ry:p.r*Math.PI/2})},
+  house(p){const x=p.x,z=p.z;add(new THREE.BoxGeometry(1.8,1.7,1.6),0x9a7a55,x,0.85,z);add(new THREE.ConeGeometry(1.4,1,4),0x6a4a3a,x,2.2,z,{ry:Math.PI/4});add(new THREE.BoxGeometry(0.4,0.95,0.06),0x4a3020,x,0.47,z+0.8)},
+  rubble(p){const n=2+Math.floor(rng()*3);for(let i=0;i<n;i++){const s=0.05+rng()*0.12;add(rng()>0.5?new THREE.BoxGeometry(s,s*0.6,s):new THREE.SphereGeometry(s/2,4,3),rng()>0.5?0x6a6a5e:0x5a5a48,p.x+(rng()-0.5)*0.5,s*0.3,p.z+(rng()-0.5)*0.5,{ry:rng()*3})}},
+  gate(p){const x=p.x,z=p.z;add(new THREE.BoxGeometry(0.15,1.5,0.15),0x5a5a50,x-0.5,0.75,z);add(new THREE.BoxGeometry(0.15,1.5,0.15),0x5a5a50,x+0.5,0.75,z);add(new THREE.BoxGeometry(1.2,0.1,0.1),0x5a5a50,x,1.5,z)},
+  table(p){add(new THREE.BoxGeometry(1.2,0.08,0.8),0x6a5a4a,p.x,0.75,p.z);for(let i=0;i<4;i++){const ox=i<2?-0.45:0.45,oz=i%2==0?-0.3:0.3;add(new THREE.CylinderGeometry(0.03,0.03,0.7,4),0x5a4a3a,p.x+ox,0.37,p.z+oz)}},
+};
+for(const p of D){const g=GEN[p.t];if(g)g(p)}
+const cx=15,cz=15;let theta=Math.PI*0.3,phi=Math.PI/3.2,radius=25;
+const tgt=new THREE.Vector3(cx,1.5,cz);
+function uc(){cam.position.set(tgt.x+radius*Math.sin(phi)*Math.cos(theta),tgt.y+radius*Math.cos(phi),tgt.z+radius*Math.sin(phi)*Math.sin(theta));cam.lookAt(tgt)}
+uc();let dr=false,px,py;
+canvas.addEventListener('pointerdown',e=>{dr=true;px=e.clientX;py=e.clientY});
+addEventListener('pointermove',e=>{if(!dr)return;theta+=(e.clientX-px)*0.008;phi=Math.max(0.15,Math.min(1.45,phi+(e.clientY-py)*0.008));px=e.clientX;py=e.clientY;uc()});
+addEventListener('pointerup',()=>dr=false);
+canvas.addEventListener('wheel',e=>{radius=Math.max(6,Math.min(50,radius+e.deltaY*0.03));uc()},{passive:true});
+addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();ren.setSize(innerWidth,innerHeight)});
+let t=0;(function a(){requestAnimationFrame(a);t+=0.05;ren.render(scene,cam)})();
+</script>
+</body>
+</html>
