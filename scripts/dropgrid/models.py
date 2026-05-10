@@ -24,7 +24,15 @@ class SceneResult:
     meta: Dict[str, Any]
     trace: List[Dict[str, Any]]
 
-    def to_ascii(self, include_legend: bool = False, show_axes: bool = True, include_warnings: bool = True, symbol_overrides: Dict[str, str] | None = None):
+    def to_ascii(
+        self,
+        include_legend: bool = False,
+        show_axes: bool = True,
+        include_warnings: bool = True,
+        symbol_overrides: Dict[str, str] | None = None,
+        show_borders: bool = True,
+        show_heights: bool = False,
+    ):
         from .exporters import result_to_ascii
         return result_to_ascii(
             self,
@@ -32,6 +40,8 @@ class SceneResult:
             show_axes=show_axes,
             include_warnings=include_warnings,
             symbol_overrides=symbol_overrides,
+            show_borders=show_borders,
+            show_heights=show_heights,
         )
 
     def to_layout(self, fmt: str = "parts") -> List[Dict[str, Any]]:

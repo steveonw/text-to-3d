@@ -213,3 +213,70 @@ def test_topology_blocks_solver_overlap():
     topo = {(p.gx, p.gz) for p in result.pieces if p.meta.get("topology_emitted")}
     clutter = [(p.gx, p.gz) for p in result.pieces if p.group == "clutter"]
     assert all(c not in topo for c in clutter)
+
+
+# ── Box-drawing borders and height view ───────────────────────────────────────
+
+def test_ascii_borders_uses_box_drawing():
+    """MA zone cells should use ┌─┐│└─┘ chars when show_borders=True."""
+    from dropgrid.api import solve_object_scene
+    DSL = """
+anchor campfire center
+ma hard radius 4
+object tree label ring count 6 shape circle radius 6
+"""
+    result = solve_object_scene(DSL, seed=1, debug=False)
+    ascii_out = result.to_ascii(show_borders=True, include_warnings=False)
+    box_chars = set('┌─┐│└─┘┬┴├┤┼')
+    assert any(ch in ascii_out for ch in box_chars), "Expected box-drawing chars in MA zone border"
+
+
+def test_ascii_no_borders_uses_shade():
+    """show_borders=False should use only ░ for MA cells."""
+    from dropgrid.api import solve_object_scene
+    DSL = """
+anchor campfire center
+ma hard radius 3
+"""
+    result = solve_object_scene(DSL, seed=1, debug=False)
+    ascii_out = result.to_ascii(show_borders=False, include_warnings=False)
+    assert '┌' not in ascii_out
+    assert '│' not in ascii_out
+    # MA cells rendered as shade
+    assert '░' in ascii_out
+
+
+def test_ascii_height_view_appended():
+    """show_heights=True should append a height grid with block chars."""
+    from dropgrid.api import solve_object_scene
+    DSL = """
+anchor campfire center
+object tree label ring count 3 shape circle radius 4
+"""
+    result = solve_object_scene(DSL, seed=1, debug=False)
+    ascii_out = result.to_ascii(show_heights=True, include_warnings=False)
+    assert 'Height:' in ascii_out
+    assert '█' in ascii_out  # trees are tall tier
+
+
+def test_ascii_height_campfire_is_short():
+    """Campfire should render as ▒ (short tier) in the height view."""
+    from dropgrid.api import solve_object_scene
+    DSL = """
+anchor campfire center
+"""
+    result = solve_object_scene(DSL, seed=1, debug=False)
+    ascii_out = result.to_ascii(show_heights=True, include_warnings=False)
+    assert '▒' in ascii_out
+
+
+def test_ascii_border_legend_note():
+    """Legend with show_borders=True should include box-drawing note."""
+    from dropgrid.api import solve_object_scene
+    DSL = """
+anchor campfire center
+ma hard radius 3
+"""
+    result = solve_object_scene(DSL, seed=1, debug=False)
+    ascii_out = result.to_ascii(include_legend=True, show_borders=True, include_warnings=False)
+    assert '┌─┐' in ascii_out  # border note in legend
