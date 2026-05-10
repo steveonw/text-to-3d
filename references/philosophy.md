@@ -53,7 +53,7 @@ Neither side is asked to do what it's bad at. The LLM's entire attention budget 
 
 The quiet payoff of this approach is that each piece can *react to its neighbors*. A tree near the path looks different from a tree deep in the forest. A chair at the head of a table can be slightly grander. A torch on a corner of the wall can be tilted a bit toward the courtyard.
 
-None of this requires new templates. It just requires the LLM, when authoring each piece, to see what's around it and make a small contextual choice. That's what the per-piece context exporter exists for (see `scripts/authoring/` once built).
+None of this requires new templates. It just requires the LLM, when authoring each piece, to see what's around it and make a small contextual choice. That's what the per-piece context exporter exists for — see `scripts/authoring/context_exporter.py` and the full workflow in `SKILL.md`.
 
 This is impossible with a template library — the template doesn't know where it's being stamped. It's trivial with per-piece authoring.
 

@@ -124,7 +124,7 @@ object log     label firewood count 3 target campfire side any  distance 1 spaci
 
 | Keyword | Type | Meaning |
 |---|---|---|
-| `target <label>` | string | Type or label of pieces to follow. Matches by `piece.type` |
+| `target <label>` | string | Group to follow. Matches by `piece.type`, `piece.group`, or `piece.label` — whichever matches first |
 | `side <s>` | string | `any`, `left`, `right`, `north`, `south`, `east`, `west` |
 | `distance N` | int | Offset from the target piece in grid cells |
 | `spacing N` | int | Only attach to every Nth target piece (controls density) |
