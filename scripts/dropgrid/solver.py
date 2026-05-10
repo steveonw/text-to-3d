@@ -379,7 +379,7 @@ def solve_compiled(spec, seed=42, debug=False):
         # follow/attach — ANY type with 'target' in intent (and no 'shape')
         if has_target:
             target = obj.get('target', 'road')
-            roads = [p for p in pieces if p.type == target]
+            roads = [p for p in pieces if p.type == target or p.group == target or p.label == target]
             distance = obj.get('distance', 2)
             spacing = max(1, obj.get('spacing', 1))
             side = obj.get('side', 'any')
