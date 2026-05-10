@@ -34,6 +34,8 @@ def generate_scaffold(
     grid_divisions: int = 40,
     params_block: str = "",
     build_body: str = "",
+    ground_color: str | None = None,
+    ground_size: float | None = None,
 ) -> str:
 
     params_js = params_block or """\
@@ -70,6 +72,16 @@ def generate_scaffold(
         scene.add(g);
         return g;
     }"""
+
+    gsize = ground_size if ground_size is not None else float(grid_size)
+    ground_js = f"""
+        const groundGeo = new THREE.PlaneGeometry({gsize}, {gsize});
+        const groundMat = new THREE.MeshStandardMaterial({{ color: {_hex_to_js_int(ground_color)}, roughness: 0.9, metalness: 0.0 }});
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -0.01;
+        ground.receiveShadow = true;
+        scene.add(ground);""" if ground_color is not None else ""
 
     grid_js = f"""
         const gridHelper = new THREE.GridHelper({grid_size}, {grid_divisions}, 0x444444, 0x222222);
@@ -198,24 +210,25 @@ def generate_scaffold(
     document.body.appendChild(renderer.domElement);
 
     // Lighting
-    const ambient = new THREE.AmbientLight(0xffffff, 0.5);
-    scene.add(ambient);
+    const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x4a3728, 0.5);
+    scene.add(hemiLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    const dirLight = new THREE.DirectionalLight(0xfff4e0, 1.2);
     dirLight.position.set(15, 25, 20);
     dirLight.castShadow = true;
-    dirLight.shadow.mapSize.set(1024, 1024);
+    dirLight.shadow.mapSize.set(2048, 2048);
     dirLight.shadow.camera.near = 0.5;
-    dirLight.shadow.camera.far = 80;
-    dirLight.shadow.camera.left = -20;
-    dirLight.shadow.camera.right = 20;
-    dirLight.shadow.camera.top = 20;
-    dirLight.shadow.camera.bottom = -20;
+    dirLight.shadow.camera.far = 100;
+    dirLight.shadow.camera.left = -30;
+    dirLight.shadow.camera.right = 30;
+    dirLight.shadow.camera.top = 30;
+    dirLight.shadow.camera.bottom = -30;
     scene.add(dirLight);
 
-    const fillLight = new THREE.DirectionalLight(0x8899bb, 0.3);
+    const fillLight = new THREE.DirectionalLight(0x8899bb, 0.4);
     fillLight.position.set(-10, 8, -10);
     scene.add(fillLight);
+{ground_js}
 {grid_js}
 {axes_js}
 
@@ -435,12 +448,17 @@ def generate_scene_html(
     bg_color: str = "#1a1a2e",
     show_grid: bool = True,
     show_axes: bool = False,
+    ground_color: str | None = "#2d2416",
+    ground_size: float | None = None,
 ) -> str:
     """Generate a complete Three.js HTML page from a SceneResult + geometry packets.
 
-    scene_result — SceneResult from solve_object_scene()
-    packets      — {piece_id: normalised_packet} from geometry_receiver.receive_all()
-                   May be partial; unpacketed pieces get a grey placeholder.
+    scene_result  — SceneResult from solve_object_scene()
+    packets       — {piece_id: normalised_packet} from geometry_receiver.receive_all()
+                    May be partial; unpacketed pieces get a grey placeholder.
+    ground_color  — hex color for the ground plane (default dark earth tone).
+                    Pass None to disable the ground plane entirely.
+    ground_size   — size of the ground plane in scene units; defaults to grid_size (40).
     """
     pieces = scene_result.pieces
 
@@ -470,6 +488,8 @@ def generate_scene_html(
         show_grid=show_grid,
         show_axes=show_axes,
         build_body=build_body,
+        ground_color=ground_color,
+        ground_size=ground_size,
     )
 
 

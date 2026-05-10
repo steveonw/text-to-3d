@@ -320,3 +320,84 @@ object tree label forest count 6 shape circle radius 5 clusters 3 spread 1
     assert "Forest Scene" in html
     # All pieces have authored geometry — no placeholder
     assert "0x888888" not in html
+
+
+# ── ground plane + lighting ────────────────────────────────────────────────────
+
+def test_ground_plane_present_by_default():
+    scene = _scene(_piece(1, "tree", 5, 5))
+    html = sc.generate_scene_html(scene, {})
+    assert "PlaneGeometry" in html
+
+
+def test_ground_plane_disabled_when_none():
+    scene = _scene(_piece(1, "tree", 5, 5))
+    html = sc.generate_scene_html(scene, {}, ground_color=None)
+    assert "PlaneGeometry" not in html
+
+
+def test_ground_plane_custom_color():
+    scene = _scene(_piece(1, "tree", 5, 5))
+    html = sc.generate_scene_html(scene, {}, ground_color="#3a2c1a")
+    assert "0x3a2c1a" in html
+
+
+def test_hemisphere_light_present():
+    scene = _scene(_piece(1, "tree", 5, 5))
+    html = sc.generate_scene_html(scene, {})
+    assert "HemisphereLight" in html
+
+
+def test_directional_light_increased():
+    scene = _scene(_piece(1, "tree", 5, 5))
+    html = sc.generate_scene_html(scene, {})
+    # Default directional intensity is now 1.2
+    assert "1.2" in html
+
+
+# ── SceneResult.to_layout ──────────────────────────────────────────────────────
+
+def test_to_layout_parts_format():
+    pieces = [_piece(1, "tree", 10, 12)]
+    scene = _scene(*pieces)
+    layout = scene.to_layout(fmt="parts")
+    assert len(layout) == 1
+    assert layout[0]["x"] == 10.0
+    assert layout[0]["z"] == 12.0
+    assert layout[0]["w"] == 1.0
+
+
+def test_to_layout_items_format_corner_offset():
+    pieces = [_piece(1, "tree", 10, 12)]
+    scene = _scene(*pieces)
+    layout = scene.to_layout(fmt="items")
+    assert layout[0]["x"] == 9.5
+    assert layout[0]["z"] == 11.5
+
+
+def test_to_layout_preserves_type_label():
+    pieces = [_piece(7, "lantern", 3, 3)]
+    scene = _scene(*pieces)
+    layout = scene.to_layout()
+    assert layout[0]["type"] == "lantern"
+    assert layout[0]["label"] == "lantern"
+    assert layout[0]["id"] == 7
+
+
+def test_to_layout_invalid_fmt_raises():
+    scene = _scene(_piece(1, "tree", 0, 0))
+    with pytest.raises(ValueError):
+        scene.to_layout(fmt="bad")
+
+
+def test_to_layout_empty_scene():
+    scene = _scene()
+    assert scene.to_layout() == []
+
+
+def test_to_layout_multiple_pieces():
+    pieces = [_piece(i, "rock", i * 3, 5) for i in range(4)]
+    scene = _scene(*pieces)
+    layout = scene.to_layout()
+    assert len(layout) == 4
+    assert [r["x"] for r in layout] == [0.0, 3.0, 6.0, 9.0]

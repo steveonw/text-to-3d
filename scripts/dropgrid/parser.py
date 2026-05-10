@@ -29,7 +29,7 @@ def parse_object_scene(text: str) -> dict:
             i = 2
             while i < len(toks):
                 k = toks[i]
-                if k in {"label", "target", "from", "heading", "shape", "side", "symbol"}:
+                if k in {"label", "target", "from", "heading", "shape", "side", "symbol", "to", "near"}:
                     obj[k] = toks[i + 1]
                     i += 2
                 elif k in {"count", "steps", "clusters", "spacing", "distance", "radius"}:
