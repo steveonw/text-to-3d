@@ -37,22 +37,16 @@ ren.shadowMap.type=THREE.PCFSoftShadowMap;
 ren.toneMapping=THREE.ACESFilmicToneMapping;
 ren.toneMappingExposure=0.75;
 scene.background=new THREE.Color(0x0a0806);
-
-// Warm indoor ambient — no sky, just torch glow
 scene.add(new THREE.HemisphereLight(0x302010,0x100800,0.3));
-const ambient=new THREE.AmbientLight(0x201508,0.4);
-scene.add(ambient);
+scene.add(new THREE.AmbientLight(0x201508,0.4));
 
 const cx=15,cz=15;
 
 // Stone-tile floor
-const floorGeo=new THREE.PlaneGeometry(14,14);
-const floorMat=new THREE.MeshLambertMaterial({color:0x3a3530});
-const floor=new THREE.Mesh(floorGeo,floorMat);
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(14,14),
+  new THREE.MeshLambertMaterial({color:0x3a3530}));
 floor.rotation.x=-Math.PI/2;floor.position.set(0,-0.01,0);floor.receiveShadow=true;
 scene.add(floor);
-
-// Floor tile grid lines
 for(let i=-7;i<=7;i++){
   const lh=new THREE.Mesh(new THREE.PlaneGeometry(14,0.04),new THREE.MeshBasicMaterial({color:0x2a2520}));
   lh.rotation.x=-Math.PI/2;lh.position.set(0,0.001,i);scene.add(lh);
@@ -60,81 +54,83 @@ for(let i=-7;i<=7;i++){
   lv.rotation.x=-Math.PI/2;lv.position.set(i,0.001,0);scene.add(lv);
 }
 
+// Pre-index fence positions for neighbour-based orientation
+const fenceSet=new Set(D.filter(p=>p.t==='fence').map(p=>p.x+','+p.z));
+function fenceAt(x,z){return fenceSet.has(x+','+z);}
+// EW neighbour = same z row; NS neighbour = same x column
+function wallIsEW(p){
+  const ewN=fenceAt(p.x-1,p.z)||fenceAt(p.x+1,p.z);
+  const nsN=fenceAt(p.x,p.z-1)||fenceAt(p.x,p.z+1);
+  if(ewN&&!nsN) return true;
+  if(nsN&&!ewN) return false;
+  // corner: use position relative to room centroid
+  const fc=D.filter(q=>q.t==='fence');
+  const fx=fc.reduce((s,q)=>s+q.x,0)/fc.length;
+  const fz=fc.reduce((s,q)=>s+q.z,0)/fc.length;
+  return Math.abs(p.z-fz)>Math.abs(p.x-fx);
+}
+
 D.forEach((p,i)=>{
   const px=p.x-cx, pz=p.z-cz;
 
   if(p.t==='campfire'){
-    // Fireplace — stone mantle on south wall
-    const mantle=new THREE.Mesh(
-      new THREE.BoxGeometry(2.2,0.18,0.5),
-      new THREE.MeshLambertMaterial({color:0x554840})
-    );
+    const mantle=new THREE.Mesh(new THREE.BoxGeometry(2.2,0.18,0.5),
+      new THREE.MeshLambertMaterial({color:0x554840}));
     mantle.position.set(px,1.35,pz);mantle.castShadow=true;scene.add(mantle);
-    // Firebox sides
     for(let s of[-0.9,0.9]){
       const side=new THREE.Mesh(new THREE.BoxGeometry(0.3,1.4,0.5),
         new THREE.MeshLambertMaterial({color:0x4a3c35}));
       side.position.set(px+s,0.7,pz);scene.add(side);
     }
-    // Firebox back
     const back=new THREE.Mesh(new THREE.BoxGeometry(1.6,1.2,0.15),
       new THREE.MeshLambertMaterial({color:0x2a2018}));
     back.position.set(px,0.6,pz+0.18);scene.add(back);
-    // Logs
     for(let l=0;l<2;l++){
       const log=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.09,1.2,6),
         new THREE.MeshLambertMaterial({color:0x5c3010}));
       log.rotation.z=Math.PI/2;log.rotation.y=l*0.4-0.2;
       log.position.set(px,0.12,pz);scene.add(log);
     }
-    // Flame
     const flame=new THREE.Mesh(new THREE.ConeGeometry(0.22,0.55,6),
       new THREE.MeshBasicMaterial({color:0xff8800}));
     flame.position.set(px,0.5,pz);scene.add(flame);
     const flame2=new THREE.Mesh(new THREE.ConeGeometry(0.14,0.4,5),
       new THREE.MeshBasicMaterial({color:0xffcc00}));
     flame2.position.set(px+0.12,0.55,pz-0.05);scene.add(flame2);
-    // Fire light
     const fl=new THREE.PointLight(0xff6600,4.0,14);fl.position.set(px,1.0,pz);scene.add(fl);
     const fl2=new THREE.PointLight(0xff9900,2.0,10);fl2.position.set(px,0.5,pz);scene.add(fl2);
     return;
   }
 
   if(p.t==='fence'){
-    // Stone wall section
+    const ew=wallIsEW(p);
+    // Width 1.04 to close gaps between adjacent panels
     const wall=new THREE.Mesh(
-      new THREE.BoxGeometry(1.0,2.5,0.35),
-      new THREE.MeshLambertMaterial({color:vc(75,65,58,15,12,10,i*17)})
+      new THREE.BoxGeometry(1.04,2.5,0.38),
+      new THREE.MeshLambertMaterial({color:vc(70,60,52,12,10,8,i*17)})
     );
-    // Orient wall based on position relative to center
-    const isNS=Math.abs(px)>Math.abs(pz);
-    if(isNS) wall.rotation.y=Math.PI/2;
+    if(!ew) wall.rotation.y=Math.PI/2;
     wall.position.set(px,1.25,pz);wall.castShadow=true;wall.receiveShadow=true;
     scene.add(wall);
-    // Stone mortar lines
-    const mortar=new THREE.Mesh(
-      new THREE.BoxGeometry(0.98,0.04,0.38),
-      new THREE.MeshLambertMaterial({color:0x3a3530})
-    );
-    mortar.position.set(px,0.8,pz);if(isNS)mortar.rotation.y=Math.PI/2;scene.add(mortar);
-    mortar.position.set(px,1.6,pz);scene.add(mortar.clone());
+    // Mortar lines
+    for(let my of[0.6,1.2,1.8,2.4]){
+      const m=new THREE.Mesh(new THREE.BoxGeometry(1.06,0.04,0.40),
+        new THREE.MeshLambertMaterial({color:0x2e2a26}));
+      if(!ew)m.rotation.y=Math.PI/2;
+      m.position.set(px,my,pz);scene.add(m);
+    }
     return;
   }
 
   if(p.t==='table'){
-    // Long wooden table (2x1 footprint)
-    const top=new THREE.Mesh(
-      new THREE.BoxGeometry(1.9,0.1,0.9),
-      new THREE.MeshLambertMaterial({color:vc(130,85,40,20,15,10,i*23)})
-    );
+    const top=new THREE.Mesh(new THREE.BoxGeometry(1.9,0.1,0.9),
+      new THREE.MeshLambertMaterial({color:vc(130,85,40,20,15,10,i*23)}));
     top.position.set(px,0.75,pz);top.castShadow=true;scene.add(top);
-    // Legs
     for(let lx of[-0.75,0.75])for(let lz of[-0.35,0.35]){
       const leg=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.74,0.1),
         new THREE.MeshLambertMaterial({color:0x6a4020}));
       leg.position.set(px+lx,0.37,pz+lz);scene.add(leg);
     }
-    // Table items — mug, plate
     const mug=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.05,0.12,6),
       new THREE.MeshLambertMaterial({color:0x8a7060}));
     mug.position.set(px+0.3,0.86,pz+0.1);scene.add(mug);
@@ -145,10 +141,8 @@ D.forEach((p,i)=>{
   }
 
   if(p.t==='log'){
-    // Wooden bench
     const seat=new THREE.Mesh(new THREE.BoxGeometry(1.4,0.1,0.4),
-      new THREE.MeshLambertMaterial({color:vc(100,65,30,15,12,8,i*31)})
-    );
+      new THREE.MeshLambertMaterial({color:vc(100,65,30,15,12,8,i*31)}));
     seat.position.set(px,0.45,pz);seat.castShadow=true;scene.add(seat);
     for(let lx of[-0.55,0.55]){
       const leg=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.44,0.38),
@@ -159,7 +153,6 @@ D.forEach((p,i)=>{
   }
 
   if(p.t==='lantern'){
-    // Wall torch — bracket + torch body + flame
     const bracket=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.08,0.35),
       new THREE.MeshLambertMaterial({color:0x303030}));
     bracket.position.set(px,1.4,pz);scene.add(bracket);
@@ -177,7 +170,6 @@ D.forEach((p,i)=>{
     const body=new THREE.Mesh(new THREE.CylinderGeometry(0.28,0.24,0.55,10),
       new THREE.MeshLambertMaterial({color:vc(110,70,30,20,15,10,i*13)}));
     body.position.set(px,0.28,pz);body.castShadow=true;scene.add(body);
-    // Hoops
     for(let y of[0.14,0.28,0.42]){
       const hoop=new THREE.Mesh(new THREE.TorusGeometry(0.27,0.02,4,10),
         new THREE.MeshLambertMaterial({color:0x2a2010}));
@@ -187,14 +179,10 @@ D.forEach((p,i)=>{
   }
 });
 
-// Orbit controls
 let theta=Math.PI*0.15,phi=0.65,radius=20,isDrag=false,lx=0,ly=0;
 function updateCam(){
-  cam.position.set(
-    radius*Math.sin(phi)*Math.sin(theta),
-    radius*Math.cos(phi),
-    radius*Math.sin(phi)*Math.cos(theta)
-  );cam.lookAt(0,0,0);
+  cam.position.set(radius*Math.sin(phi)*Math.sin(theta),radius*Math.cos(phi),radius*Math.sin(phi)*Math.cos(theta));
+  cam.lookAt(0,0,0);
 }
 updateCam();
 const cv=document.getElementById('cv');
