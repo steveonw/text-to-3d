@@ -39,7 +39,11 @@ def normalize_spec(spec: dict) -> dict:
     ma_r = _ma_radius(spec)
     for obj in spec.get("objects", []):
         fixed = dict(obj)
-        if mode == "hard" and "radius" in fixed:
+        # Only bump radius for motif (ring/rect) objects — scatter objects with
+        # `near` are anchored to a specific piece, not the scene center, so the
+        # MA-radius check does not apply to them.
+        is_motif = 'shape' in fixed
+        if is_motif and mode == "hard" and "radius" in fixed:
             req_r = int(fixed.get("radius", 0))
             clearance = _motif_clearance(fixed.get("type", ""), fixed.get("spread", 0))
             min_safe = ma_r + clearance
