@@ -280,3 +280,93 @@ ma hard radius 3
     result = solve_object_scene(DSL, seed=1, debug=False)
     ascii_out = result.to_ascii(include_legend=True, show_borders=True, include_warnings=False)
     assert '┌─┐' in ascii_out  # border note in legend
+
+
+# ── E11: Path terminus pinning ────────────────────────────────────────────────
+
+def test_path_to_stops_adjacent_to_target():
+    """Path with `to` should stop when it reaches adjacency to the target piece."""
+    from dropgrid.api import solve_object_scene
+    DSL = """
+anchor campfire center
+object market label shop count 1 shape circle radius 8
+object road label path steps 20 from campfire heading east wobble 0.1 to shop_0
+"""
+    result = solve_object_scene(DSL, seed=42, debug=False)
+    roads = [p for p in result.pieces if p.type == 'road']
+    market = next((p for p in result.pieces if p.type == 'market'), None)
+    assert market is not None, "Market piece not placed"
+    assert len(roads) > 0, "No road pieces placed"
+    last = roads[-1]
+    dist = abs(last.gx - market.gx) + abs(last.gz - market.gz)
+    assert dist <= 2, f"Path ended {dist} cells from target, expected <=2"
+
+
+def test_path_steps_alias_for_count():
+    """`steps N` should produce N road cells (alias for count)."""
+    from dropgrid.api import solve_object_scene
+    DSL = """
+anchor campfire center
+object road label path steps 6 from campfire heading south wobble 0.0
+"""
+    result = solve_object_scene(DSL, seed=42, debug=False)
+    roads = [p for p in result.pieces if p.type == 'road']
+    assert len(roads) == 6, f"Expected 6 road cells from steps 6, got {len(roads)}"
+
+
+def test_path_to_unknown_target_still_places():
+    """Path with a `to` that doesn't exist should walk the full count."""
+    from dropgrid.api import solve_object_scene
+    DSL = """
+anchor campfire center
+object road label path steps 5 from campfire heading east to nonexistent
+"""
+    result = solve_object_scene(DSL, seed=42, debug=False)
+    roads = [p for p in result.pieces if p.type == 'road']
+    assert len(roads) == 5
+
+
+# ── E12: Anchored cluster scatter ────────────────────────────────────────────
+
+def test_scatter_near_places_within_radius():
+    """Pieces scattered `near X radius R` should all be within R cells of X."""
+    from dropgrid.api import solve_object_scene
+    DSL = """
+anchor campfire center
+object barrel label fuel count 4 near campfire radius 3
+"""
+    result = solve_object_scene(DSL, seed=42, debug=False)
+    anchor = next(p for p in result.pieces if p.type == 'campfire')
+    barrels = [p for p in result.pieces if p.type == 'barrel']
+    assert len(barrels) > 0
+    for b in barrels:
+        d = abs(b.gx - anchor.gx) + abs(b.gz - anchor.gz)
+        assert d <= 3, f"Barrel at ({b.gx},{b.gz}) is {d} from anchor, exceeds radius 3"
+
+
+def test_scatter_radius_places_within_distance():
+    """Pieces with `radius R` scatter within R of scene center."""
+    from dropgrid.api import solve_object_scene
+    DSL = """
+anchor campfire center
+object rubble label clutter count 4 radius 5
+"""
+    result = solve_object_scene(DSL, seed=42, debug=False)
+    anchor = next(p for p in result.pieces if p.type == 'campfire')
+    rubble = [p for p in result.pieces if p.type == 'rubble']
+    assert len(rubble) > 0
+    for r in rubble:
+        d = abs(r.gx - anchor.gx) + abs(r.gz - anchor.gz)
+        assert d <= 5, f"Rubble at ({r.gx},{r.gz}) is {d} from center, exceeds radius 5"
+
+
+def test_scatter_near_invalid_target_falls_back_to_center():
+    """near with unknown type should still place pieces (falls back to scene center)."""
+    from dropgrid.api import solve_object_scene
+    DSL = """
+anchor campfire center
+object rubble label debris count 3 near nonexistent radius 4
+"""
+    result = solve_object_scene(DSL, seed=42, debug=False)
+    rubble = [p for p in result.pieces if p.type == 'rubble']
+    assert len(rubble) > 0

@@ -180,7 +180,7 @@ def _follower_shoulder_score(occ, ma, x, z, heading, shoulder_dist):
             score -= 1
     return score
 
-def _choose_next_path_cell(occ, ma, x, z, heading, straight_bias=3, shoulder_dist=0, prev_turn=0, wobble=0.0):
+def _choose_next_path_cell(occ, ma, x, z, heading, straight_bias=3, shoulder_dist=0, prev_turn=0, wobble=0.0, goal_pos=None):
     candidates = []
     for turn, h in [(0, heading), (-1, _turn_left(heading)), (1, _turn_right(heading))]:
         dx, dz = DIRS[h]
@@ -197,6 +197,12 @@ def _choose_next_path_cell(occ, ma, x, z, heading, straight_bias=3, shoulder_dis
             score += _follower_shoulder_score(occ, ma, nx, nz, h, shoulder_dist)
             if wobble and turn != 0:
                 score += 1
+            # E11: goal steering — reward steps that close distance to target
+            if goal_pos:
+                curr_d = abs(goal_pos[0] - x) + abs(goal_pos[1] - z)
+                new_d = abs(goal_pos[0] - nx) + abs(goal_pos[1] - nz)
+                if new_d < curr_d:
+                    score += 4
         candidates.append((score, turn, h, nx, nz, why))
     candidates.sort(reverse=True, key=lambda t: (t[0], -abs(t[1])))
     return candidates[0], candidates
@@ -236,19 +242,41 @@ def solve_compiled(spec, seed=42, debug=False):
         has_target = 'target' in obj and not has_shape
         has_scatter = not has_shape and not has_path and not has_target
 
-        # scatter objects (radius only, no shape/target/path)
-        if has_scatter and ('radius' in obj or tp == 'rubble'):
-            pts = [(ax+12,az), (ax-12,az+3), (ax+1,az+13), (ax-10, az-8)]
+        # scatter objects — E12: proper radius + optional near-anchor
+        if has_scatter and ('radius' in obj or 'near' in obj or tp == 'rubble'):
+            radius = obj.get('radius', 8)
+            near_label = obj.get('near')
+            if near_label:
+                near_piece = next((p for p in pieces if p.type == near_label or p.label == near_label), None)
+                scx, scz = (near_piece.gx, near_piece.gz) if near_piece else (ax, az)
+            else:
+                scx, scz = ax, az
+            # Candidates sorted by distance — inner ring first, then outer
+            cands = sorted(
+                [(scx + dx, scz + dz)
+                 for dx in range(-radius, radius + 1)
+                 for dz in range(-radius, radius + 1)
+                 if 1 <= (dx * dx + dz * dz) ** 0.5 <= radius],
+                key=lambda p: (p[0] - scx) ** 2 + (p[1] - scz) ** 2,
+            )
+            step = max(1, len(cands) // max(1, count + 1))
             placed = 0
+            tried = set()
             for i in range(count):
-                x, z = pts[i % len(pts)]
-                ok, why = fits(occ, set(), cells_for(tp, 0), x, z)
-                trace.append({'phase':'emit','type':tp,'why':why,'try':(x,z)})
-                if ok:
-                    next_id, p = place_piece(pieces, occ, next_id, tp, f"{label}_{placed}", x, z, 0)
-                    if obj.get('symbol'):
-                        p.meta['symbol'] = obj['symbol']
-                    placed += 1
+                for j in range(len(cands)):
+                    pos = cands[(i * step + j) % len(cands)]
+                    if pos in tried:
+                        continue
+                    x, z = pos
+                    ok, why = fits(occ, set(), cells_for(tp, 0), x, z)
+                    trace.append({'phase': 'scatter', 'type': tp, 'why': why, 'try': (x, z)})
+                    if ok:
+                        next_id, p = place_piece(pieces, occ, next_id, tp, f"{label}_{placed}", x, z, 0)
+                        if obj.get('symbol'):
+                            p.meta['symbol'] = obj['symbol']
+                        placed += 1
+                        tried.add(pos)
+                        break
             continue
 
         # motif emitter — ANY type with 'shape' in intent
@@ -312,25 +340,40 @@ def solve_compiled(spec, seed=42, debug=False):
             prev_turn = 0
             x, z = ax + dx * (start_offset - 1), az + dz * (start_offset - 1)
             wobble = float(obj.get('wobble', 0.0))
-            for i in range(count):
+            # E11: `steps` as alias for count in path context
+            path_count = obj.get('count') or obj.get('steps', 1)
+            # E11: `to` terminus — steer toward target piece, stop when adjacent
+            goal_pos = None
+            to_label = obj.get('to')
+            if to_label:
+                goal = next((p for p in pieces if p.type == to_label or p.label == to_label), None)
+                if goal:
+                    goal_pos = (goal.gx, goal.gz)
+            placed_path = 0
+            for i in range(path_count):
+                # Stop when adjacent to goal
+                if goal_pos and abs(x - goal_pos[0]) + abs(z - goal_pos[1]) <= 1:
+                    break
                 best, candidates = _choose_next_path_cell(
                     occ, ma, x, z, heading,
                     straight_bias=3,
                     shoulder_dist=road_shoulder,
                     prev_turn=prev_turn,
                     wobble=wobble,
+                    goal_pos=goal_pos,
                 )
                 for cscore, cturn, ch, cx, cz, cwhy in candidates:
-                    trace.append({'phase':'place','type':tp,'why':cwhy,'try':(cx,cz),'score':cscore,'heading':ch})
+                    trace.append({'phase': 'place', 'type': tp, 'why': cwhy, 'try': (cx, cz), 'score': cscore, 'heading': ch})
                 score, turn, heading, nx, nz, why = best
                 if score <= -999:
                     break
-                rot = 1 if heading in (0,2) else 0
-                next_id, p = place_piece(pieces, occ, next_id, tp, f"{label}_{i}", nx, nz, rot)
+                rot = 1 if heading in (0, 2) else 0
+                next_id, p = place_piece(pieces, occ, next_id, tp, f"{label}_{placed_path}", nx, nz, rot)
                 if obj.get('symbol'):
                     p.meta['symbol'] = obj['symbol']
                 x, z = nx, nz
                 prev_turn = turn
+                placed_path += 1
             continue
 
         # follow/attach — ANY type with 'target' in intent (and no 'shape')

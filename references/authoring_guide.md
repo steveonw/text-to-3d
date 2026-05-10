@@ -136,7 +136,133 @@ should produce a slightly different version.
 
 ---
 
-## 4. The craft — contextual variation
+## 4. Silhouette recipes — common types
+
+These are starting points, not templates. Each scene is different — adjust proportions,
+lean, and color every time. The goal is to see *what reads correctly* vs what reads wrong.
+
+### Tent
+
+**Wrong:** a tall narrow cone reads as an antenna or Christmas tree.  
+**Right:** a wide low cone (radius ≥ 0.7 × height) with a separate entrance box.
+
+```
+Wrong       Right
+  /\         ___
+ /  \       /   \
+/    \    /______\  ← wide cone
+              []     ← entrance (front box)
+```
+
+```python
+# tent body — wide and squat
+{"shape": "cone",       "dimensions": [0.75, 1.0],       "position": [0.0, 0.5, 0.0]}
+# entrance — small box at the front edge (z+ = "front")
+{"shape": "box",        "dimensions": [0.28, 0.45, 0.12], "position": [0.0, 0.22, 0.42]}
+# optional ridge pole
+{"shape": "cylinder",   "dimensions": [0.03, 0.03, 1.2],  "position": [0.0, 1.0, 0.0],
+                        "rotation": [0.0, 0.0, 90.0]}
+```
+
+Contextual variation: edge tents tilt the cone 4–6° toward `outward_direction`.
+Interior tents have the entrance facing inward (flip z sign). Weathered tents
+use higher roughness (0.9+) and muted browns.
+
+---
+
+### Barrel
+
+**Wrong:** a very tall narrow cylinder reads as a pipe or post.  
+**Right:** a fat short cylinder, radius close to half the height.
+
+```python
+# barrel — roughly as wide as it is tall
+{"shape": "cylinder",  "dimensions": [0.28, 0.32, 0.6],  "position": [0.0, 0.3, 0.0]}
+# optional lid
+{"shape": "cylinder",  "dimensions": [0.30, 0.30, 0.05], "position": [0.0, 0.62, 0.0]}
+```
+
+Taper options: `[0.26, 0.30, 0.6]` (bulged in the middle — use for wooden barrel feel).
+Standing: y-axis. Lying on side: rotate 90° on z and shift y down to `radius`.
+
+---
+
+### Log
+
+**Wrong:** a vertical cylinder reads as a post.  
+**Right:** a horizontal cylinder — rotate 90° on the z-axis, y position = radius.
+
+```python
+# log lying flat, oriented E-W
+{"shape": "cylinder",  "dimensions": [0.14, 0.14, 0.85], "position": [0.0, 0.14, 0.0],
+                       "rotation": [0.0, 0.0, 90.0]}
+```
+
+For logs around a campfire, vary the z-rotation (70–90°) and x-offset so they
+lean slightly inward. A log at `near_path=true` can be oriented along the
+`path_direction` axis.
+
+---
+
+### Tree
+
+**Wrong:** identical trunk + cone for every tree — reads as stamped.  
+**Right:** vary trunk taper, canopy width, lean, and whether there's a second layer.
+
+```python
+# Forest interior tree — vertical, layered canopy
+{"shape": "cylinder",  "dimensions": [0.10, 0.16, 0.85], "position": [0.0, 0.42, 0.0]}
+{"shape": "cone",      "dimensions": [0.52, 1.3],         "position": [0.0, 1.5, 0.0]}
+{"shape": "cone",      "dimensions": [0.36, 0.9],         "position": [0.0, 2.3, 0.0]}
+
+# Edge tree leaning outward (outward_direction="W") — tilt trunk, offset canopy
+{"shape": "cylinder",  "dimensions": [0.12, 0.18, 0.9],  "position": [-0.08, 0.45, 0.0],
+                       "rotation": [0.0, 0.0, -5.0]}
+{"shape": "cone",      "dimensions": [0.6, 1.4],          "position": [-0.15, 1.5, 0.0]}
+
+# Lone tree at corner — wide spreading canopy
+{"shape": "cylinder",  "dimensions": [0.14, 0.14, 0.7],  "position": [0.0, 0.35, 0.0]}
+{"shape": "cone",      "dimensions": [0.7, 1.1],          "position": [0.0, 1.25, 0.0]}
+```
+
+Pick one of these families and vary the numbers — don't copy the exact values.
+
+---
+
+### Fence post with rails
+
+**Wrong:** a tall thin box — looks like a blade, no visual weight.  
+**Right:** a square-section post with two horizontal rails connecting to neighbors.
+
+```python
+# post
+{"shape": "box",  "dimensions": [0.1, 0.9, 0.1],  "position": [0.0, 0.45, 0.0]}
+# rail high (connecting to neighbors in the x direction)
+{"shape": "box",  "dimensions": [0.9, 0.07, 0.06], "position": [0.0, 0.72, 0.0]}
+# rail low
+{"shape": "box",  "dimensions": [0.9, 0.07, 0.06], "position": [0.0, 0.38, 0.0]}
+```
+
+For fences running N-S, swap the rail dimensions: `[0.06, 0.07, 0.9]`.
+Context: a fence piece `near_path=true` can lean slightly toward the path.
+A corner post (`in_corner=true`) can be a bit taller and heavier (0.13 × 0.13 cross-section).
+
+---
+
+### Quick height reference
+
+| Type | Typical height | Cone/cylinder ratio |
+|---|---|---|
+| Barrel | 0.5–0.7 | diameter ≈ height |
+| Log (lying) | 0.15–0.2 (= radius) | horizontal |
+| Tent | 0.8–1.2 | base radius ≥ 0.65 × height |
+| Fence post | 0.8–1.0 | 0.08–0.12 cross-section |
+| Tree trunk | 0.7–1.0 | 0.10–0.20 radius |
+| Tree canopy | 1.0–1.5 | 0.45–0.75 radius |
+
+---
+
+## 5. The craft — contextual variation
 
 This is the part that matters. Geometry primitives are easy. Making them
 *respond to context* is the skill.
@@ -207,7 +333,7 @@ Lantern with nearest neighbor = road at direction="W", distance=2.0:
 
 ---
 
-## 5. Scale discipline
+## 6. Scale discipline
 
 Your primitives must fit within the piece's footprint. Each piece occupies
 one grid cell (1 × 1 in x/z). The maximum width/depth of any geometry is 0.9
@@ -219,7 +345,7 @@ within a scene: if trees are ~2 units, don't make one tree 4 units.
 
 ---
 
-## 6. Material choices
+## 7. Material choices
 
 Color, roughness, and metalness carry as much meaning as shape.
 
@@ -251,7 +377,7 @@ end of a path should be slightly dimmer than one right beside the viewer.
 
 ---
 
-## 7. Anti-patterns
+## 8. Anti-patterns
 
 ### Stamping
 
@@ -298,7 +424,7 @@ underground.
 
 ---
 
-## 8. When reuse is acceptable
+## 9. When reuse is acceptable
 
 Not every piece benefits from unique geometry. Use judgement.
 
@@ -317,7 +443,7 @@ author them distinctly. If no, it's okay to repeat.
 
 ---
 
-## 9. Quick reference — authoring checklist
+## 10. Quick reference — authoring checklist
 
 Before submitting a geometry packet for a piece:
 
