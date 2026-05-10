@@ -100,9 +100,20 @@ If yes → go to step 5.
 
 Run cheap sanity checks before committing to a full render:
 
+Easiest path — one call gets all three views with the adapter wired in:
+
+```python
+from verification.run_all import verify, format_report
+print(format_report(verify(result)))
+```
+
+Or run the verifiers individually:
+
 - **Braille view** (`scripts/verification/braille_view.py`) — a silhouette of the scene. Good for catching "wait, nothing should be over *there*."
 - **Path walk** (`scripts/verification/path_walk.py`) — simulates walking through the scene as text. Catches dead zones, awkward spacing, unreachable areas.
 - **Spatial validator** (`scripts/verification/spatial_validate.py`) — overlaps, out-of-bounds pieces, floating geometry.
+
+The verifiers expect their own input formats (`parts` for braille, `items` for spatial); use `result.to_layout('parts')` or `result.to_layout('items')` to get them. `run_all.py` does this conversion for you.
 
 See `references/checklists.md` for what to look for in verification output.
 
@@ -272,6 +283,7 @@ Load these when needed — don't try to read them all upfront.
 | `references/narrative-decomposition.md` | Turning a user's description into a DSL |
 | `references/script-recipes.md` | Common Three.js patterns |
 | `references/worked_examples/full_loop_example.md` | Full end-to-end trace: DSL → solver → context → authored geometry → HTML |
+| `references/cross_piece_narrative.md` | Making a finished scene feel inhabited — kettles, ropes, worn paths, shared mats |
 | `examples/campsite_3d.html` (and other new-style examples) | Live demonstrations of Path B (direct Three.js authoring) — open in browser |
 
 ---

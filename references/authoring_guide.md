@@ -458,7 +458,9 @@ Before submitting a geometry packet for a piece:
 
 ## See also
 
-- `references/philosophy.md` — why we author in context
+- `references/cross_piece_narrative.md` — once per-piece silhouettes are solid, add the kettles, ropes, and worn paths that make a scene feel inhabited.
+- `references/philosophy.md` — why we author in context, and why "lived-in" beats "correctly placed."
 - `references/threejs-conventions.md` — Three.js geometry and material reference
 - `scripts/authoring/schema.md` — geometry packet JSON schema
 - `references/worked_examples/full_loop_example.md` — full worked trace with authored packets
+- `references/checklists.md` — broader verification passes

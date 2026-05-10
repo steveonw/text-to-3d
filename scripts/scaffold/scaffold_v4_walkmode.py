@@ -388,23 +388,32 @@ def _mat_js(mat: dict) -> str:
     return f"new THREE.MeshStandardMaterial({{ {props} }})"
 
 
-def build_body_from_packets(pieces: list, packets: dict) -> str:
+def build_body_from_packets(pieces: list, packets: dict,
+                            centroid: tuple = (0.0, 0.0, 0.0)) -> str:
     """Generate a Three.js buildModel() function body from solver pieces + geometry packets.
 
-    pieces  — list of Piece objects from SceneResult.pieces
-    packets — {piece_id: normalised_packet} from geometry_receiver.receive_all()
+    pieces        — list of Piece objects from SceneResult.pieces
+    packets       — {piece_id: normalised_packet} from geometry_receiver.receive_all()
+    centroid      — (cx, cy, cz) to subtract from every piece's gx/gy/gz, so the
+                    scene centers on world origin instead of sitting at raw dropgrid
+                    coordinates. Default (0, 0, 0) preserves the old behavior;
+                    generate_scene_html() passes the actual scene centroid.
 
     Pieces without a geometry packet get a grey placeholder box so the scene
     is always fully populated even during partial authoring sessions.
     """
+    cx_off, cy_off, cz_off = centroid
     lines = ["    function buildModel(scene) {", "        const g = new THREE.Group();", ""]
 
     for piece in pieces:
         pid = piece.id
+        px = piece.gx - cx_off
+        py = piece.gy - cy_off
+        pz = piece.gz - cz_off
         lines.append(f"        // piece {pid}: {piece.type} ({piece.label})")
         lines.append("        {")
         lines.append("            const pg = new THREE.Group();")
-        lines.append(f"            pg.position.set({piece.gx}, {piece.gy}, {piece.gz});")
+        lines.append(f"            pg.position.set({px}, {py}, {pz});")
         # Each rot step is 90° around y-axis; Three.js uses radians
         rot_rad = piece.rot * 1.5707963267948966  # π/2
         lines.append(f"            pg.rotation.y = {rot_rad:.6f};")
@@ -462,28 +471,37 @@ def generate_scene_html(
     """
     pieces = scene_result.pieces
 
-    # Auto-position camera to frame the whole scene
+    # Compute scene centroid — subtracted from piece positions so the scene
+    # centers on world origin (instead of sitting at raw dropgrid coords with
+    # the ground plane offset to one side). Camera and orbit target also
+    # work in centered space.
     if pieces:
-        cx = sum(p.gx for p in pieces) / len(pieces)
-        cz = sum(p.gz for p in pieces) / len(pieces)
+        cx_centroid = sum(p.gx for p in pieces) / len(pieces)
+        cz_centroid = sum(p.gz for p in pieces) / len(pieces)
         spread = max(
-            max(abs(p.gx - cx) for p in pieces),
-            max(abs(p.gz - cz) for p in pieces),
+            max(abs(p.gx - cx_centroid) for p in pieces),
+            max(abs(p.gz - cz_centroid) for p in pieces),
             1,
         )
         cam_y = max(10, spread * 0.9)
-        cam_z = cz + spread * 1.5
-        camera_pos = (cx, cam_y, cam_z)
+        cam_z = spread * 1.5
+        # Camera & orbit target now in centered (origin) space
+        camera_pos = (0.0, cam_y, cam_z)
+        orbit_target = (0.0, 0.0, 0.0)
     else:
-        cx, cz = 0.0, 0.0
+        cx_centroid, cz_centroid = 0.0, 0.0
         camera_pos = (15, 15, 30)
+        orbit_target = (0.0, 0.0, 0.0)
 
-    build_body = build_body_from_packets(pieces, packets)
+    build_body = build_body_from_packets(
+        pieces, packets,
+        centroid=(cx_centroid, 0.0, cz_centroid),
+    )
 
     return generate_scaffold(
         title=title,
         camera_pos=camera_pos,
-        orbit_target=(cx, 0, cz),
+        orbit_target=orbit_target,
         bg_color=bg_color,
         show_grid=show_grid,
         show_axes=show_axes,

@@ -96,13 +96,17 @@ Prompt → decomposition → DSL → solver output → per-piece authoring with 
 - Location: `references/worked_examples/full_loop_example.md`
 - Status: **done.** 8-step trace on shrine clearing (23 pieces). Includes real ASCII layout, context packets for representative pieces, authored geometry with context-driven notes.
 
-### 🟡 Verifier integration
-Braille view, path walk, and spatial validator work in isolation but don't accept `SceneResult` directly.
-- `braille_view.py` expects `parts` format (`x, z` centered, `w/d/h`)
-- `spatial_validate.py` / `layout_compare.py` expect `items` format (`x, z` corner-positioned)
-- `SceneResult.to_layout(fmt)` adapter added (see models.py) — unblocks all verifiers.
-- `scene_inventory.py` works directly on rendered HTML — no glue needed.
-- Status: **adapter added.** Needs integration test to confirm verifier workflows end-to-end.
+### ✅ Cross-piece narrative reference
+The "make it feel inhabited" layer past per-piece authoring. Connectors (rope between posts, shared mats), use-evidence (kettle by fire, mug on table, boots at tent), and surface variation (chips, cracks, lichen). Concrete worked example of turning a sterile camp into an inhabited one.
+- Location: `references/cross_piece_narrative.md`
+- Status: **done.** ~170 lines covering three categories of detail, where to insert them in the pipeline (in-packet vs extra DSL piece), when not to add them, and a 5-item checklist for the inhabited-feeling test.
+
+### ✅ Verifier integration
+Braille view, path walk, and spatial validator each work in isolation; `SceneResult.to_layout(fmt)` adapter (in `scripts/dropgrid/models.py`) bridges to the formats they expect. `scripts/verification/run_all.py` runs all three off a single SceneResult.
+- `braille_view.py` ← `to_layout('parts')` (centered x/z, w/d/h, with room dims)
+- `spatial_validate.py` / `layout_compare.py` ← `to_layout('items')` (corner x/z, centered y, w/d/h)
+- `run_all.py` returns a dict with ascii / braille / inventory / warnings.
+- Status: **working end-to-end.** Per-type default footprints baked into the adapter so single-cell pieces render at sensible sizes; multi-cell pieces (fences, walls) use their actual `p.cells` extent.
 
 ### ✅ Try Now demo server
 Local HTTP server that lets anyone run the full pipeline in a browser without installing anything.
