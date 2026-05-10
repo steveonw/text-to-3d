@@ -81,15 +81,15 @@ How-to for context-aware geometry authoring. Teaches the craft of improvising go
 - Location: `references/authoring_guide.md`
 - Status: **done.** 315 lines covering context reading, coordinate conventions, primitive vocabulary, contextual variation (edge/interior/near_path/corner), scale discipline, materials, anti-patterns, and pre-submission checklist.
 
-### 🔴 DSL reference (distilled)
+### ✅ DSL reference (distilled)
 A focused DSL reference, not spread across multiple source READMEs.
-- Target location: `references/dsl_reference.md`
-- Status: **stubbed** (draft exists). Needs to be written as a single authoritative reference drawing from dropgrid_complete's README, the parser source, and example DSL files.
+- Location: `references/dsl_reference.md`
+- Status: **done.** 305 lines covering all placement modes, anchor syntax, object fields, and worked examples.
 
-### 🔴 Philosophy writeup
+### 🟡 Philosophy writeup
 The full "toddler with blocks" philosophy as its own reference, separate from the SKILL.md intro.
-- Target location: `references/philosophy.md`
-- Status: **stubbed** (draft exists). Expand with examples of what counts as over-reuse vs. healthy variation.
+- Location: `references/philosophy.md`
+- Status: **partial.** 91 lines, core concepts written. Could use more examples of over-reuse vs. healthy variation.
 
 ### ✅ Full-loop worked example
 Prompt → decomposition → DSL → solver output → per-piece authoring with context → verification → final HTML.
@@ -103,6 +103,34 @@ Braille view, path walk, and spatial validator work in isolation but don't accep
 - `SceneResult.to_layout(fmt)` adapter added (see models.py) — unblocks all verifiers.
 - `scene_inventory.py` works directly on rendered HTML — no glue needed.
 - Status: **adapter added.** Needs integration test to confirm verifier workflows end-to-end.
+
+### ✅ Try Now demo server
+Local HTTP server that lets anyone run the full pipeline in a browser without installing anything.
+- Location: `try_now.py`
+- Status: **done.** GET `/` serves landing page with built-in examples + custom DSL textarea. POST `/generate` runs `solve_object_scene()` + `render_html()` and returns HTML to embed in an iframe. Three.js served locally from `vendor/` (no CDN required).
+
+### ✅ Wall box-drawing chars as single source of truth
+Box-drawing connectivity chars (─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼ + caps) computed once in Python from actual neighbour positions and stored in `piece.meta['wall_sym']`. Both ASCII exporter and 3D renderer read from this — eliminates the orientation-divergence gap.
+- Location: `scripts/dropgrid/exporters.py` → `annotate_wall_symbols()`, `_piece_wall_char()`
+- Status: **done.** Handles multi-cell footprints (e.g. 2×1 fence). Gate excluded from wall connectivity set (special topology semantics).
+
+### ✅ Bug fixes: parser bounds + follow target matching
+- Parser: bounds check on `heading` keyword no longer throws on edge input.
+- Follow mode: `target` now matches `p.type`, `p.group`, or `p.label` (was type-only — broke `target walkway` when pieces were labelled `walkway_0`, `walkway_1`).
+- Location: `scripts/dropgrid/solver.py`, `scripts/dropgrid/parser.py`
+
+### ✅ Example 3D scenes
+Hand-authored Three.js scenes demonstrating the full pipeline at different complexity levels.
+- `examples/campsite_3d.html` — outdoor campsite, custom geometry per type (trees, campfire, lanterns, logs, rubble)
+- `examples/tavern_interior.html` — indoor tavern, wall_sym-driven panel orientation, box-drawing borders
+- `examples/fishing_dock.html` — lake dock scene, water/shore split, rowboats, crab traps, reed stalks, shack
+- `examples/workshop_interior.html` — workshop interior, cast-iron stove, workbench+vise, tool pegs, dusk window
+- Status: **done.** All four committed. Color variation uses per-channel `vc()` function (no byte-overflow artifacts).
+
+### ✅ Vendored Three.js
+Local Three.js r128 build so scenes work offline and in environments where CDN is blocked.
+- Location: `vendor/three.r128.min.js`
+- Status: **done.** Served by `try_now.py` at `/vendor/three.r128.min.js`; also inlined in standalone example HTMLs.
 
 ---
 
