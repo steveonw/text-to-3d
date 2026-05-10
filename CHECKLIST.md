@@ -29,29 +29,28 @@ Generates a standalone, openable `.html` file with orbit + first-person navigati
 - Location: `scripts/scaffold/scaffold_v4_walkmode.py`
 - Status: working (ported from v4), has WASD + mouse + HUD + compass
 
-### 🔴 Per-piece context exporter
+### ✅ Per-piece context exporter
 Given a placed piece, returns its local context — nearest neighbors, distances, facing direction, whether it's on an edge/interior/path, what zone it's in. Enables context-aware geometry authoring.
-- Target location: `scripts/authoring/context_exporter.py`
-- Status: **not built.** A placeholder stub exists. The solver already has this information internally — needs a function to walk the solver's output and emit per-piece context packets.
-- Estimated effort: ~half a day.
+- Location: `scripts/authoring/context_exporter.py`
+- Entry point: `export_all_contexts(scene_result)` → `{piece_id: context_dict}`
+- Status: **working.** 229 lines, emits `interior`, `on_cluster_edge`, `in_corner`, `near_path`, `path_direction`, `outward_direction`, `neighbors`, `scene_center`.
 
-### 🔴 Geometry authoring protocol
-A defined format for Claude to hand back geometry per piece, and a receiver that slots it into the scene. Probably a JSON schema: `{piece_id, primitives: [{type: "box", dims: [x,y,z], position: [x,y,z], rotation: [...], material: {...}}, ...]}`.
-- Target location: `scripts/authoring/geometry_receiver.py` + schema doc
-- Status: **not built.** Design decisions pending — see `scripts/authoring/README.md`.
-- Estimated effort: ~1 day (schema + receiver + tests).
+### ✅ Geometry authoring protocol
+A defined format for Claude to hand back geometry per piece, and a receiver that slots it into the scene. Schema: `{piece_id, primitives: [{shape, dimensions, position, rotation, material}]}`.
+- Location: `scripts/authoring/geometry_receiver.py` + `scripts/authoring/schema.md`
+- Entry point: `receive_all(packets)` → `{piece_id: validated_packet}`
+- Status: **working.** Receiver with full validation (shape, dims, position, rotation, material/emissive). 62 tests pass.
 
-### 🔴 Renderer rewiring for LLM-authored geometry
-The current `drop_grid_v6.html` renderer has baked per-type geometry. Needs a code path that accepts authored pieces from step above and assembles them into the scene, positioned according to solver coordinates.
-- Target location: modified `scripts/scaffold/scaffold_v4_walkmode.py` + possibly a new HTML template
-- Status: **not built.** Existing renderers still work, but they use the old baked-geometry approach.
-- Estimated effort: ~1-2 days.
+### ✅ Renderer rewiring for LLM-authored geometry
+Accepts authored geometry packets and assembles them into a complete Three.js scene positioned according to solver coordinates.
+- Location: `scripts/scaffold/scaffold_v4_walkmode.py`
+- Entry point: `generate_scene_html(scene_result, packets)` → HTML string
+- Status: **working.** `build_body_from_packets()` generates per-piece Groups; missing packets get grey placeholder boxes.
 
-### 🔴 SKILL.md philosophy refinement
-The draft SKILL.md captures the toddler-with-blocks philosophy, but it hasn't been tested with fresh Claude sessions. Expect iteration — behavioral shaping through prose is hard, and the LLM default is to reach for template-library thinking. Tightening the wording will be ongoing.
+### 🟡 SKILL.md philosophy refinement
+SKILL.md captures the toddler-with-blocks philosophy and the full workflow. One round of iteration done.
 - Location: `SKILL.md` (root of skill)
-- Status: **draft only.** Needs eval runs against real prompts, observation of where Claude falls back to template patterns, and corresponding prose tightening.
-- Estimated effort: ongoing — probably a week of iteration across test scenes.
+- Status: **first iteration done.** Needs eval runs against fresh Claude sessions and tightening where template-library thinking creeps back in. Ongoing.
 
 ---
 
@@ -77,10 +76,10 @@ Reference docs Claude loads on demand.
 - Done: threejs-conventions, braille-spatial, checklists, narrative-decomposition, script-recipes
 - All ported from v4, relevant to this skill
 
-### 🔴 Authoring guide reference
-How-to for context-aware geometry authoring. The piece that teaches Claude the actual *craft* of improvising good-looking blocks in context.
-- Target location: `references/authoring_guide.md`
-- Status: **not built.** Needs to be written once the authoring protocol exists, since it'll reference the protocol's data structures.
+### ✅ Authoring guide reference
+How-to for context-aware geometry authoring. Teaches the craft of improvising good-looking blocks in context.
+- Location: `references/authoring_guide.md`
+- Status: **done.** 315 lines covering context reading, coordinate conventions, primitive vocabulary, contextual variation (edge/interior/near_path/corner), scale discipline, materials, anti-patterns, and pre-submission checklist.
 
 ### 🔴 DSL reference (distilled)
 A focused DSL reference, not spread across multiple source READMEs.
@@ -92,10 +91,18 @@ The full "toddler with blocks" philosophy as its own reference, separate from th
 - Target location: `references/philosophy.md`
 - Status: **stubbed** (draft exists). Expand with examples of what counts as over-reuse vs. healthy variation.
 
-### 🔴 Full-loop worked example
-Existing worked examples (`gate_torches`, `topology_rect_demo`, `example-village`) show the placement half. Need one that shows the full loop: prompt → decomposition → DSL → solver output → per-piece authoring with context → verification → final HTML.
-- Target location: `references/worked_examples/full_loop_example.md`
-- Status: **not built.** Blocked on authoring protocol existing — can't write a worked example of something not yet designed.
+### ✅ Full-loop worked example
+Prompt → decomposition → DSL → solver output → per-piece authoring with context → verification → final HTML.
+- Location: `references/worked_examples/full_loop_example.md`
+- Status: **done.** 8-step trace on shrine clearing (23 pieces). Includes real ASCII layout, context packets for representative pieces, authored geometry with context-driven notes.
+
+### 🟡 Verifier integration
+Braille view, path walk, and spatial validator work in isolation but don't accept `SceneResult` directly.
+- `braille_view.py` expects `parts` format (`x, z` centered, `w/d/h`)
+- `spatial_validate.py` / `layout_compare.py` expect `items` format (`x, z` corner-positioned)
+- `SceneResult.to_layout(fmt)` adapter added (see models.py) — unblocks all verifiers.
+- `scene_inventory.py` works directly on rendered HTML — no glue needed.
+- Status: **adapter added.** Needs integration test to confirm verifier workflows end-to-end.
 
 ---
 

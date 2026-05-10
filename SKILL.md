@@ -82,9 +82,19 @@ The solver returns a `SceneResult` with every placed piece. `.to_ascii()` prints
 
 ### 4. Read the ASCII. Decide.
 
-Look at the output. Did the trees form the ring you wanted? Is the path going the right direction? Are lanterns evenly spaced?
+Look at the output before writing a single primitive. The ASCII catches layout problems that authoring cannot fix.
 
-If yes → go to step 5. If no → **change the DSL and re-solve**. The solver is cheap (~2ms). Iterate freely.
+**ASCII review checklist — check these before proceeding:**
+
+- [ ] **Paths terminate where intended.** An L-shaped path that ends mid-grid means the DSL path parameters are wrong. Fix the DSL, re-solve.
+- [ ] **Clusters cluster around something.** Objects scattered with `radius N` are placed relative to the grid center unless anchored. If a cluster of objects looks orphaned or far from the focal piece, add an anchor relation in the DSL.
+- [ ] **No isolated outliers.** A single piece alone in empty space usually means it landed outside the cluster by chance. Tighten the radius or reduce count.
+- [ ] **Object counts feel right.** The ASCII makes it easy to count — six trees should read as six, not four with two hiding behind the focal piece.
+- [ ] **Orientation makes sense.** Lanterns beside a path should appear adjacent to the path symbol, not behind the tree ring.
+
+If anything is wrong → **change the DSL and re-solve**. The solver is cheap (~2ms). Two of the six most common naturalness failures are visible in the ASCII before any geometry is written — catching them here is free.
+
+If yes → go to step 5.
 
 ### 5. Verify
 

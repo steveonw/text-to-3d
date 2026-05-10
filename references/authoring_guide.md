@@ -5,6 +5,29 @@ Read `references/philosophy.md` first if you haven't.
 
 ---
 
+## 0. What this guide does — and doesn't — fix
+
+This guide covers **per-piece geometry authoring**: how to read context and produce
+primitives that look handcrafted rather than stamped.
+
+It does **not** fix:
+
+| Problem | Where it's fixed |
+|---|---|
+| Scene feels unlit / flat / dim | Scaffold defaults (lighting, hemisphere light) |
+| Pieces float with no ground | Scaffold `ground_color` parameter |
+| Path goes nowhere / dead-ends | DSL — use different path endpoint or `to B` |
+| Outlier pieces scattered far from the rest | DSL — tighten radius or anchor to a piece |
+| Two pieces of the same type look identical | This guide — read section 4 |
+| Piece silhouette wrong (cone reads as antenna) | This guide — see section 3 primitive vocabulary |
+
+If your scene still feels off after following this guide, the problem is almost
+certainly in the scaffold or DSL, not in authoring.  Read the ASCII before
+authoring (SKILL.md step 4) — two of the most common quality failures are
+visible there before any geometry is written.
+
+---
+
 ## The one-sentence job
 
 For each placed piece, produce a geometry packet — a list of Three.js-style

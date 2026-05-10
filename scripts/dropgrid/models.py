@@ -34,6 +34,35 @@ class SceneResult:
             symbol_overrides=symbol_overrides,
         )
 
+    def to_layout(self, fmt: str = "parts") -> List[Dict[str, Any]]:
+        """Convert pieces to verifier-compatible layout dicts.
+
+        fmt='parts'  → {x, z, w, d, h} centered coords — braille_view format
+        fmt='items'  → {x, z, w, d, h} corner-positioned — layout_compare format
+
+        All pieces are treated as 1×1 footprint, height 1.  Override h in caller
+        if the verifier needs actual heights.
+        """
+        if fmt not in ("parts", "items"):
+            raise ValueError(f"fmt must be 'parts' or 'items', got {fmt!r}")
+        out = []
+        for p in self.pieces:
+            if fmt == "parts":
+                x, z = float(p.gx), float(p.gz)
+            else:
+                x, z = float(p.gx) - 0.5, float(p.gz) - 0.5
+            out.append({
+                "id": p.id,
+                "type": p.type,
+                "label": p.label,
+                "x": x,
+                "z": z,
+                "w": 1.0,
+                "d": 1.0,
+                "h": 1.0,
+            })
+        return out
+
     def to_json_dict(self) -> Dict[str, Any]:
         return {
             "pieces": [
