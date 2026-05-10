@@ -26,7 +26,7 @@ function vc(r,g,b,vr,vg,vb,s){
         | Math.min(255,b+Math.floor(h(s+2)*vb)));
 }
 
-const D=[{"t": "campfire", "x": 15, "z": 15, "r": 0, "label": "hearth"}, {"t": "fence", "x": 9, "z": 9, "r": 0, "label": "walls_0"}, {"t": "fence", "x": 11, "z": 9, "r": 0, "label": "walls_1"}, {"t": "fence", "x": 13, "z": 9, "r": 0, "label": "walls_2"}, {"t": "fence", "x": 15, "z": 9, "r": 0, "label": "walls_3"}, {"t": "fence", "x": 17, "z": 9, "r": 0, "label": "walls_4"}, {"t": "fence", "x": 19, "z": 9, "r": 0, "label": "walls_5"}, {"t": "fence", "x": 21, "z": 9, "r": 0, "label": "walls_6"}, {"t": "fence", "x": 21, "z": 11, "r": 1, "label": "walls_7"}, {"t": "fence", "x": 21, "z": 13, "r": 1, "label": "walls_8"}, {"t": "fence", "x": 21, "z": 15, "r": 1, "label": "walls_9"}, {"t": "fence", "x": 21, "z": 17, "r": 1, "label": "walls_10"}, {"t": "fence", "x": 21, "z": 19, "r": 1, "label": "walls_11"}, {"t": "fence", "x": 21, "z": 21, "r": 1, "label": "walls_12"}, {"t": "fence", "x": 19, "z": 21, "r": 0, "label": "walls_13"}, {"t": "fence", "x": 17, "z": 21, "r": 0, "label": "walls_14"}, {"t": "fence", "x": 15, "z": 21, "r": 0, "label": "walls_15"}, {"t": "fence", "x": 13, "z": 21, "r": 0, "label": "walls_16"}, {"t": "fence", "x": 11, "z": 21, "r": 0, "label": "walls_17"}, {"t": "fence", "x": 9, "z": 21, "r": 0, "label": "walls_18"}, {"t": "fence", "x": 9, "z": 19, "r": 1, "label": "walls_19"}, {"t": "fence", "x": 9, "z": 17, "r": 1, "label": "walls_20"}, {"t": "fence", "x": 9, "z": 15, "r": 1, "label": "walls_21"}, {"t": "fence", "x": 9, "z": 13, "r": 1, "label": "walls_22"}, {"t": "fence", "x": 9, "z": 11, "r": 1, "label": "walls_23"}, {"t": "table", "x": 11, "z": 14, "r": 0, "label": "tables_0"}, {"t": "table", "x": 15, "z": 11, "r": 1, "label": "tables_1"}, {"t": "log", "x": 11, "z": 16, "r": 0, "label": "benches_0"}, {"t": "log", "x": 17, "z": 11, "r": 1, "label": "benches_1"}, {"t": "lantern", "x": 14, "z": 15, "r": 0, "label": "torches_0"}, {"t": "lantern", "x": 17, "z": 15, "r": 0, "label": "torches_1"}, {"t": "lantern", "x": 17, "z": 13, "r": 0, "label": "torches_2"}, {"t": "lantern", "x": 16, "z": 18, "r": 0, "label": "torches_3"}, {"t": "lantern", "x": 15, "z": 19, "r": 0, "label": "torches_4"}, {"t": "lantern", "x": 19, "z": 16, "r": 0, "label": "torches_5"}, {"t": "barrel", "x": 15, "z": 14, "r": 0, "label": "barrels_0"}, {"t": "barrel", "x": 13, "z": 15, "r": 0, "label": "barrels_1"}, {"t": "barrel", "x": 16, "z": 13, "r": 0, "label": "barrels_2"}, {"t": "barrel", "x": 15, "z": 18, "r": 0, "label": "barrels_3"}, {"t": "barrel", "x": 18, "z": 14, "r": 0, "label": "barrels_4"}];
+const D=[{"t": "campfire", "x": 15, "z": 15, "r": 0, "label": "hearth"}, {"t": "fence", "x": 9, "z": 9, "r": 0, "label": "walls_0", "sym": "\u2576"}, {"t": "fence", "x": 11, "z": 9, "r": 0, "label": "walls_1", "sym": "\u2500"}, {"t": "fence", "x": 13, "z": 9, "r": 0, "label": "walls_2", "sym": "\u2500"}, {"t": "fence", "x": 15, "z": 9, "r": 0, "label": "walls_3", "sym": "\u2500"}, {"t": "fence", "x": 17, "z": 9, "r": 0, "label": "walls_4", "sym": "\u2500"}, {"t": "fence", "x": 19, "z": 9, "r": 0, "label": "walls_5", "sym": "\u2500"}, {"t": "fence", "x": 21, "z": 9, "r": 0, "label": "walls_6", "sym": "\u2574"}, {"t": "fence", "x": 21, "z": 11, "r": 1, "label": "walls_7", "sym": "\u2577"}, {"t": "fence", "x": 21, "z": 13, "r": 1, "label": "walls_8", "sym": "\u2502"}, {"t": "fence", "x": 21, "z": 15, "r": 1, "label": "walls_9", "sym": "\u2502"}, {"t": "fence", "x": 21, "z": 17, "r": 1, "label": "walls_10", "sym": "\u2502"}, {"t": "fence", "x": 21, "z": 19, "r": 1, "label": "walls_11", "sym": "\u2502"}, {"t": "fence", "x": 21, "z": 21, "r": 1, "label": "walls_12", "sym": "\u2518"}, {"t": "fence", "x": 19, "z": 21, "r": 0, "label": "walls_13", "sym": "\u2500"}, {"t": "fence", "x": 17, "z": 21, "r": 0, "label": "walls_14", "sym": "\u2500"}, {"t": "fence", "x": 15, "z": 21, "r": 0, "label": "walls_15", "sym": "\u2500"}, {"t": "fence", "x": 13, "z": 21, "r": 0, "label": "walls_16", "sym": "\u2500"}, {"t": "fence", "x": 11, "z": 21, "r": 0, "label": "walls_17", "sym": "\u2500"}, {"t": "fence", "x": 9, "z": 21, "r": 0, "label": "walls_18", "sym": "\u2514"}, {"t": "fence", "x": 9, "z": 19, "r": 1, "label": "walls_19", "sym": "\u2502"}, {"t": "fence", "x": 9, "z": 17, "r": 1, "label": "walls_20", "sym": "\u2502"}, {"t": "fence", "x": 9, "z": 15, "r": 1, "label": "walls_21", "sym": "\u2502"}, {"t": "fence", "x": 9, "z": 13, "r": 1, "label": "walls_22", "sym": "\u2502"}, {"t": "fence", "x": 9, "z": 11, "r": 1, "label": "walls_23", "sym": "\u2577"}, {"t": "table", "x": 11, "z": 14, "r": 0, "label": "tables_0"}, {"t": "table", "x": 15, "z": 11, "r": 1, "label": "tables_1"}, {"t": "log", "x": 11, "z": 16, "r": 0, "label": "benches_0"}, {"t": "log", "x": 17, "z": 11, "r": 1, "label": "benches_1"}, {"t": "lantern", "x": 14, "z": 15, "r": 0, "label": "torches_0"}, {"t": "lantern", "x": 17, "z": 15, "r": 0, "label": "torches_1"}, {"t": "lantern", "x": 17, "z": 13, "r": 0, "label": "torches_2"}, {"t": "lantern", "x": 16, "z": 18, "r": 0, "label": "torches_3"}, {"t": "lantern", "x": 15, "z": 19, "r": 0, "label": "torches_4"}, {"t": "lantern", "x": 19, "z": 16, "r": 0, "label": "torches_5"}, {"t": "barrel", "x": 15, "z": 14, "r": 0, "label": "barrels_0"}, {"t": "barrel", "x": 13, "z": 15, "r": 0, "label": "barrels_1"}, {"t": "barrel", "x": 16, "z": 13, "r": 0, "label": "barrels_2"}, {"t": "barrel", "x": 15, "z": 18, "r": 0, "label": "barrels_3"}, {"t": "barrel", "x": 18, "z": 14, "r": 0, "label": "barrels_4"}];
 const scene=new THREE.Scene();
 const cam=new THREE.PerspectiveCamera(45,innerWidth/innerHeight,0.1,200);
 const ren=new THREE.WebGLRenderer({canvas:document.getElementById('cv'),antialias:true});
@@ -54,21 +54,13 @@ for(let i=-7;i<=7;i++){
   lv.rotation.x=-Math.PI/2;lv.position.set(i,0.001,0);scene.add(lv);
 }
 
-// Pre-index fence positions for neighbour-based orientation
-const fenceSet=new Set(D.filter(p=>p.t==='fence').map(p=>p.x+','+p.z));
-function fenceAt(x,z){return fenceSet.has(x+','+z);}
-// EW neighbour = same z row; NS neighbour = same x column
-function wallIsEW(p){
-  const ewN=fenceAt(p.x-1,p.z)||fenceAt(p.x+1,p.z);
-  const nsN=fenceAt(p.x,p.z-1)||fenceAt(p.x,p.z+1);
-  if(ewN&&!nsN) return true;
-  if(nsN&&!ewN) return false;
-  // corner: use position relative to room centroid
-  const fc=D.filter(q=>q.t==='fence');
-  const fx=fc.reduce((s,q)=>s+q.x,0)/fc.length;
-  const fz=fc.reduce((s,q)=>s+q.z,0)/fc.length;
-  return Math.abs(p.z-fz)>Math.abs(p.x-fx);
-}
+// Wall orientation from box-drawing char — single source of truth
+// EW chars (─ and caps ╶╴): panel faces Z, no rotation
+// NS chars (│ and caps ╵╷): panel faces X, rotate PI/2
+// Corner chars (┌┐└┘): square post — same size in both directions
+const EW_CHARS = new Set(['─','╶','╴']);
+const NS_CHARS = new Set(['│','╵','╷']);
+const CORNER_CHARS = new Set(['┌','┐','└','┘','┬','┴','├','┤','┼','╋']);
 
 D.forEach((p,i)=>{
   const px=p.x-cx, pz=p.z-cz;
@@ -103,21 +95,31 @@ D.forEach((p,i)=>{
   }
 
   if(p.t==='fence'){
-    const ew=wallIsEW(p);
-    // Width 1.04 to close gaps between adjacent panels
-    const wall=new THREE.Mesh(
-      new THREE.BoxGeometry(1.04,2.5,0.38),
-      new THREE.MeshLambertMaterial({color:vc(70,60,52,12,10,8,i*17)})
-    );
-    if(!ew) wall.rotation.y=Math.PI/2;
+    const col=vc(70,60,52,12,10,8,i*17);
+    const mat=new THREE.MeshLambertMaterial({color:col});
+    const mmat=new THREE.MeshLambertMaterial({color:0x2e2a26});
+    let wall;
+    if(CORNER_CHARS.has(p.sym)){
+      // Square post at junction/corner
+      wall=new THREE.Mesh(new THREE.BoxGeometry(0.42,2.5,0.42),mat);
+    } else if(NS_CHARS.has(p.sym)){
+      // NS panel — extends along Z
+      wall=new THREE.Mesh(new THREE.BoxGeometry(0.38,2.5,2.08),mat);
+    } else {
+      // EW panel (default) — extends along X
+      wall=new THREE.Mesh(new THREE.BoxGeometry(2.08,2.5,0.38),mat);
+    }
     wall.position.set(px,1.25,pz);wall.castShadow=true;wall.receiveShadow=true;
     scene.add(wall);
-    // Mortar lines
-    for(let my of[0.6,1.2,1.8,2.4]){
-      const m=new THREE.Mesh(new THREE.BoxGeometry(1.06,0.04,0.40),
-        new THREE.MeshLambertMaterial({color:0x2e2a26}));
-      if(!ew)m.rotation.y=Math.PI/2;
-      m.position.set(px,my,pz);scene.add(m);
+    // Mortar lines (skip on corner posts)
+    if(!CORNER_CHARS.has(p.sym)){
+      const isNS=NS_CHARS.has(p.sym);
+      for(let my of[0.6,1.2,1.8,2.4]){
+        const m=new THREE.Mesh(
+          isNS ? new THREE.BoxGeometry(0.40,0.04,2.10) : new THREE.BoxGeometry(2.10,0.04,0.40),
+          mmat);
+        m.position.set(px,my,pz);scene.add(m);
+      }
     }
     return;
   }

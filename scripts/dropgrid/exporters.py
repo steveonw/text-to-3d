@@ -43,6 +43,30 @@ HEIGHTS = {
 HEIGHT_CHARS = ['░', '▒', '▓', '█']  # index = height tier 0-3
 HEIGHT_LABELS = ['flat', 'short', 'medium', 'tall']
 
+# Box-drawing chars for wall/fence pieces.
+# Key: (conn_N, conn_S, conn_E, conn_W) where True = that neighbor is also a wall piece.
+_WALL_CHARS = {
+    (False, False, False, False): '╋',  # isolated
+    (True,  True,  False, False): '│',  # N+S line
+    (False, False, True,  True ): '─',  # E+W line
+    (False, True,  True,  False): '┌',  # S+E corner
+    (False, True,  False, True ): '┐',  # S+W corner
+    (True,  False, True,  False): '└',  # N+E corner
+    (True,  False, False, True ): '┘',  # N+W corner
+    (True,  True,  True,  False): '├',  # T-junction opening E
+    (True,  True,  False, True ): '┤',  # T-junction opening W
+    (False, True,  True,  True ): '┬',  # T-junction opening S
+    (True,  False, True,  True ): '┴',  # T-junction opening N
+    (True,  True,  True,  True ): '┼',  # cross
+    (True,  False, False, False): '╵',  # N cap
+    (False, True,  False, False): '╷',  # S cap
+    (False, False, True,  False): '╶',  # E cap
+    (False, False, False, True ): '╴',  # W cap
+}
+
+# The set of piece types treated as walls for connectivity purposes.
+WALL_TYPES = {'fence', 'wall'}
+
 # Box-drawing chars for MA zone cell boundaries.
 # Key: (open_N, open_S, open_E, open_W) where True = that neighbor is NOT a MA cell.
 _BOX_CHARS = {
@@ -72,6 +96,37 @@ def _symbol_for(piece, symbol_overrides=None):
     if piece.meta.get("symbol"):
         return piece.meta["symbol"]
     return SYMBOLS.get(piece.type, piece.type[:1].upper())
+
+
+def _piece_wall_char(piece, wall_set):
+    """Return a box-drawing char for a wall piece based on its connected neighbours.
+
+    wall_set must contain ALL occupied cells of all wall pieces (not just anchors)
+    so that multi-cell footprints (e.g. 2×1 fence) detect adjacency correctly.
+    """
+    own = {(piece.gx + dx, piece.gz + dz) for dx, _, dz in piece.cells}
+    conn_N = any((x, z - 1) in wall_set and (x, z - 1) not in own for x, z in own)
+    conn_S = any((x, z + 1) in wall_set and (x, z + 1) not in own for x, z in own)
+    conn_E = any((x + 1, z) in wall_set and (x + 1, z) not in own for x, z in own)
+    conn_W = any((x - 1, z) in wall_set and (x - 1, z) not in own for x, z in own)
+    return _WALL_CHARS.get((conn_N, conn_S, conn_E, conn_W), '╋')
+
+
+def annotate_wall_symbols(result):
+    """Compute box-drawing connectivity chars for all wall/fence pieces.
+
+    Stores the char in piece.meta['wall_sym'] so renderers can read it
+    directly instead of re-deriving orientation from piece coordinates.
+    """
+    wall_set = {
+        (p.gx + dx, p.gz + dz)
+        for p in result.pieces
+        if p.type in WALL_TYPES
+        for dx, _, dz in p.cells
+    }
+    for p in result.pieces:
+        if p.type in WALL_TYPES:
+            p.meta['wall_sym'] = _piece_wall_char(p, wall_set)
 
 
 def _ma_box_char(x, z, ma_set):
@@ -115,8 +170,17 @@ def result_to_ascii(
         if 0 <= z < maxz and 0 <= x < maxx:
             grid[z][x] = _ma_box_char(x, z, ma_set) if show_borders else '░'
 
+    wall_set = {
+        (p.gx + dx, p.gz + dz)
+        for p in pieces if p.type in WALL_TYPES
+        for dx, _, dz in p.cells
+    }
+
     for p in pieces:
-        ch = _symbol_for(p, symbol_overrides)
+        if show_borders and p.type in WALL_TYPES:
+            ch = _piece_wall_char(p, wall_set)
+        else:
+            ch = _symbol_for(p, symbol_overrides)
         for dx, _, dz in p.cells:
             x = p.gx + dx
             z = p.gz + dz
