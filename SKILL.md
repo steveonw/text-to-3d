@@ -188,9 +188,50 @@ The user walks through it. They say "the lanterns are too close to the path" or 
 
 ---
 
-## Working with existing scenes
+## Two authoring paths
 
-The `examples/` folder has pre-rendered HTML scenes (`forest_shrine_v2`, `village_scene`). **Look at them to understand what output is possible, but do not extract their geometry to reuse.** They were made with baked-in per-type geometry — the approach this skill deliberately replaces. Study them for spatial composition, not for primitive arrangements.
+Choose based on what you're building:
+
+### Path A — Protocol path (for complex, multi-piece scenes)
+
+Use the context exporter and geometry receiver (steps 6–7 above). Best when:
+- You want validated, structured geometry packets
+- You're authoring 20+ distinct piece types with careful context reactions
+- You need the scaffold's fallback placeholder boxes for pieces you haven't authored yet
+
+### Path B — Direct Three.js authoring (for demos, quick renders, custom scenes)
+
+Skip the packet protocol. Solve the DSL, get the `SceneResult`, then write a complete Three.js HTML directly — reading `result.pieces`, their `p.gx`/`p.gz` coordinates, and `p.meta['wall_sym']` for wall orientation. This is how `examples/campsite_3d.html`, `examples/tavern_interior.html`, `examples/fishing_dock.html`, and `examples/workshop_interior.html` were built.
+
+```python
+result = solve_object_scene(DSL, seed=42, debug=False)
+from dropgrid.exporters import annotate_wall_symbols
+annotate_wall_symbols(result)  # populates p.meta['wall_sym'] for fence/wall pieces
+
+# Then build your Three.js HTML directly, iterating result.pieces
+# Each piece: p.type, p.gx, p.gz, p.cells, p.meta
+```
+
+Wall/fence pieces get a box-drawing char in `p.meta['wall_sym']` (e.g. `─`, `│`, `┌`, `┼`).
+Use it to choose E/W vs. N/S panel geometry instead of re-deriving orientation in JS.
+
+**Also available:** `try_now.py` is a local HTTP server (port 8000) for testing the pipeline interactively without writing code. Run `python try_now.py` and open `http://localhost:8000`.
+
+---
+
+## The example scenes
+
+`examples/` contains both old-style scenes (baked-in per-type geometry — **don't extract from these**) and new-style direct-authored scenes (study these for approach):
+
+| File | Style | Study for |
+|------|-------|-----------|
+| `forest_shrine_v2.html`, `village_scene.html` | Old — per-type baked geometry | Spatial composition only |
+| `campsite_3d.html` | New — direct Three.js | Outdoor scene, per-channel color variation, PointLights |
+| `tavern_interior.html` | New — direct Three.js | Indoor walls, wall_sym orientation, box-drawing borders |
+| `fishing_dock.html` | New — direct Three.js | Water/shore split, custom props (rowboat, crab traps, reeds) |
+| `workshop_interior.html` | New — direct Three.js | Stove, workbench, tool pegs, dusk window, shavings |
+
+New-style scenes author geometry **fresh per piece, per scene**. Study the approach, not the specific geometry.
 
 ---
 
@@ -202,12 +243,14 @@ The full pipeline is operational:
 |--------|----------|--------|
 | Placement solver | `scripts/dropgrid/api.py` | ✅ working |
 | DSL parser | `scripts/dropgrid/parser.py` | ✅ working |
-| ASCII exporter | `scripts/dropgrid/exporters.py` | ✅ working |
+| ASCII exporter + wall box-drawing | `scripts/dropgrid/exporters.py` | ✅ working |
+| Wall orientation (single source of truth) | `annotate_wall_symbols()` in exporters | ✅ working |
 | Per-piece context exporter | `scripts/authoring/context_exporter.py` | ✅ working |
 | Geometry packet receiver | `scripts/authoring/geometry_receiver.py` | ✅ working |
 | HTML scaffold + walk mode | `scripts/scaffold/scaffold_v4_walkmode.py` | ✅ working |
 | Scene HTML from packets | `generate_scene_html()` in scaffold | ✅ working |
 | Verifiers (braille, path walk, spatial) | `scripts/verification/` | ✅ working |
+| Local demo server | `try_now.py` | ✅ working |
 
 Read `CHECKLIST.md` for tier 2/3 items and known gaps.
 
@@ -229,6 +272,7 @@ Load these when needed — don't try to read them all upfront.
 | `references/narrative-decomposition.md` | Turning a user's description into a DSL |
 | `references/script-recipes.md` | Common Three.js patterns |
 | `references/worked_examples/full_loop_example.md` | Full end-to-end trace: DSL → solver → context → authored geometry → HTML |
+| `examples/campsite_3d.html` (and other new-style examples) | Live demonstrations of Path B (direct Three.js authoring) — open in browser |
 
 ---
 
