@@ -1,12 +1,13 @@
 """
-lidar_lenses.py — standalone single-file engine (v0.2.0)
+lidar_lenses.py — standalone single-file engine (v0.2.1)
 
 Multi-lens analytic raycaster with attention-weighted fusion, triangle
 mesh support, BVH acceleration, and STL loading. Pure numpy + PIL.
 Drop this single file into any sandbox; no package install needed.
 
-Original, intersection routines, BVH, scene
-loading, rendering. Pure numpy + PIL.
+Cleaned up in v0.2.1: removed dead code (stratified_rays, frustum culling),
+deduplicated camera-basis helpers, cached Mesh triangle edges, added
+memory-bounded chunking to ray_triangle_batch for safe external use
 
 v0.2.0 additions over v3:
   - Triangle meshes (Mesh dataclass) with vectorized Möller-Trumbore intersection
@@ -214,7 +215,7 @@ def ray_cone_local(origins: np.ndarray, dirs: np.ndarray,
 
     k2 = (r / (2.0 * half_h)) ** 2 if half_h > EPS else 0.0
     apex_y = half_h
-    ay = apex_y - oy   # distance below apex
+    ay = apex_y - oy
 
     A = dx*dx + dz*dz - k2 * dy*dy
     B = 2.0 * (ox*dx + oz*dz + k2 * ay * dy)
@@ -352,12 +353,17 @@ class Camera:
 
 
 def _camera_basis(cam: Camera):
+    """Right-handed camera basis: (forward, right, up). With gimbal-lock
+    fallback for cameras where target-position is (anti)parallel to cam.up."""
     forward = cam.target - cam.position
     forward = forward / np.linalg.norm(forward)
     right = np.cross(forward, cam.up)
     rn = np.linalg.norm(right)
     if rn < EPS:
-        right = np.cross(forward, np.array([0., 0., 1.]))
+        # Pick an alternate vector that isn't parallel to forward.
+        # If up is along Z, use X; otherwise use Z.
+        alt = np.array([1., 0., 0.]) if abs(cam.up[2]) > 0.99 else np.array([0., 0., 1.])
+        right = np.cross(forward, alt)
         right = right / np.linalg.norm(right)
     else:
         right = right / rn
@@ -365,35 +371,18 @@ def _camera_basis(cam: Camera):
     return forward, right, up
 
 
-def stratified_rays(cam, n_samples, rng):
-    W, H = cam.width, cam.height
-    aspect = W / H
-    fov_rad = math.radians(cam.fov_deg)
-    half_h = math.tan(fov_rad / 2)
-    half_w = half_h * aspect
-    grid_w = max(1, int(math.sqrt(n_samples * aspect)))
-    grid_h = max(1, n_samples // grid_w)
-    gx, gy = np.meshgrid(np.arange(grid_w), np.arange(grid_h))
-    jx = rng.random(gx.shape); jy = rng.random(gy.shape)
-    px = ((gx + jx) / grid_w * W).flatten()
-    py = ((gy + jy) / grid_h * H).flatten()
-    ndc_x = (px / W - 0.5) * 2 * half_w
-    ndc_y = (0.5 - py / H) * 2 * half_h
-    forward, right, up = _camera_basis(cam)
-    dirs = (forward[None, :]
-            + ndc_x[:, None] * right[None, :]
-            + ndc_y[:, None] * up[None, :])
-    dirs = dirs / np.linalg.norm(dirs, axis=1, keepdims=True)
-    origins = np.tile(cam.position[None, :], (len(dirs), 1))
-    pixels = np.stack([px, py], axis=1)
-    return origins, dirs, pixels
-
-
 @dataclass
 class Burst:
-    cam: Camera
+    """Output of fire_burst: per-ray geometry + hits for one camera shot.
+
+    All arrays have length n_samples (the number of rays fired). Rays that
+    missed have depth=INF. The per-ray `origins` field is what enables
+    lens-symmetric fusion — pinhole bursts share origin but orthographic
+    ones don't.
+    """
+    cam: object   # forward ref to Camera (defined in lenses.py)
     pixels: np.ndarray
-    origins: np.ndarray       # per-ray origins (lens-aware; for ortho they differ)
+    origins: np.ndarray
     dirs: np.ndarray
     depths: np.ndarray
     colors: np.ndarray
@@ -402,20 +391,6 @@ class Burst:
     coverage: float = 0.0
     unique_pieces: int = 0
     pilot_score: float = 1.0
-
-
-def fire_burst(cam, prims, n_samples, seed):
-    rng = np.random.default_rng(seed)
-    origins, dirs, pixels = stratified_rays(cam, n_samples, rng)
-    t, color, normal, pid = cast_rays(origins, dirs, prims)
-    hit = t < INF
-    coverage = float(hit.mean()) if len(t) else 0.0
-    unique_pieces = int(len(np.unique(pid[hit]))) if hit.any() else 0
-    return Burst(
-        cam=cam, pixels=pixels, origins=origins, dirs=dirs, depths=t, colors=color,
-        normals=normal, piece_ids=pid,
-        coverage=coverage, unique_pieces=unique_pieces,
-    )
 
 
 # ──────────────────────────────────────────────────────────
@@ -492,13 +467,9 @@ def _burst_world_points(b: Burst):
         return (np.zeros((0, 3)), np.zeros((0, 3)),
                 np.zeros((0, 3)), np.array([]), np.array([], dtype=int))
     hit_idx = np.where(hit)[0]
-    # Use stored per-ray origins — correct for any source lens (pinhole shares
-    # them; orthographic does not). Falls back to cam.position for legacy
-    # Bursts that may not have origins stored (shouldn't happen post-fix).
-    if hasattr(b, "origins") and b.origins is not None and len(b.origins):
-        origins = b.origins[hit_idx]
-    else:
-        origins = b.cam.position[None, :].repeat(len(hit_idx), axis=0)
+    # Per-ray origins (correct for all source lenses — pinhole shares them,
+    # orthographic doesn't). v0.2.0 made `origins` a required Burst field.
+    origins = b.origins[hit_idx]
     pts = origins + b.dirs[hit_idx] * b.depths[hit_idx, None]
     return pts, b.colors[hit_idx], b.normals[hit_idx], b.depths[hit_idx], hit_idx
 
@@ -588,8 +559,8 @@ class Mesh:
                       can be added later)
         piece_id, piece_type: same role as Primitive's fields
 
-    The mesh stores its own internal BVH over its triangles, built lazily on
-    first ray-cast.
+    The mesh caches v0/edge1/edge2 arrays for fast Möller-Trumbore and stores
+    its own internal BVH over triangles, built lazily on first ray-cast.
     """
     vertices: np.ndarray
     faces: np.ndarray
@@ -599,6 +570,10 @@ class Mesh:
     face_normals: np.ndarray = None
     aabb_min: np.ndarray = None
     aabb_max: np.ndarray = None
+    # Cached precomputed edge arrays (used by _cast_mesh)
+    _tri_v0: np.ndarray = None
+    _tri_e1: np.ndarray = None
+    _tri_e2: np.ndarray = None
     _bvh: object = None  # BVHNode, built lazily
 
     def __post_init__(self):
@@ -609,6 +584,10 @@ class Mesh:
         if self.aabb_min is None:
             self.aabb_min = self.vertices.min(axis=0)
             self.aabb_max = self.vertices.max(axis=0)
+        # Cache triangle edges for Möller-Trumbore
+        self._tri_v0 = self.vertices[self.faces[:, 0]]
+        self._tri_e1 = self.vertices[self.faces[:, 1]] - self._tri_v0
+        self._tri_e2 = self.vertices[self.faces[:, 2]] - self._tri_v0
 
 
 def _compute_face_normals(vertices: np.ndarray, faces: np.ndarray) -> np.ndarray:
@@ -628,7 +607,8 @@ def _triangle_aabbs(vertices: np.ndarray, faces: np.ndarray) -> np.ndarray:
 
 
 def ray_triangle_batch(origins: np.ndarray, dirs: np.ndarray,
-                       v0: np.ndarray, edge1: np.ndarray, edge2: np.ndarray
+                       v0: np.ndarray, edge1: np.ndarray, edge2: np.ndarray,
+                       _chunk_threshold: int = 10_000_000
                        ) -> Tuple[np.ndarray, np.ndarray]:
     """Möller-Trumbore: each ray vs each triangle in the batch.
 
@@ -638,14 +618,33 @@ def ray_triangle_batch(origins: np.ndarray, dirs: np.ndarray,
         v0:      (T, 3) triangle vertex 0
         edge1:   (T, 3) = v1 - v0
         edge2:   (T, 3) = v2 - v0
+        _chunk_threshold: chunk over rays when R*T exceeds this (default 10M)
+                          to keep peak memory below ~250 MB regardless of input
 
     Returns:
         t_hit:  (R,) — nearest hit distance per ray; INF if miss
         f_idx:  (R,) — index of winning triangle in the batch; -1 if miss
+
+    Memory note: the unchunked implementation allocates (R, T, 3) work arrays.
+    For R=50000 and T=5000, that's 6 GB per array — this function chunks the
+    ray axis automatically when the product exceeds _chunk_threshold.
     """
     R, T = len(origins), len(v0)
     if R == 0 or T == 0:
         return np.full(R, INF), np.full(R, -1, dtype=np.int64)
+
+    # Chunk over rays when the work tensor would exceed the threshold
+    if R * T > _chunk_threshold:
+        out_t = np.full(R, INF)
+        out_f = np.full(R, -1, dtype=np.int64)
+        chunk = max(1, _chunk_threshold // max(1, T))
+        for i in range(0, R, chunk):
+            sl = slice(i, i + chunk)
+            out_t[sl], out_f[sl] = ray_triangle_batch(
+                origins[sl], dirs[sl], v0, edge1, edge2,
+                _chunk_threshold=_chunk_threshold,
+            )
+        return out_t, out_f
 
     # h = dirs × edge2 → (R, T, 3)
     h = np.cross(dirs[:, None, :], edge2[None, :, :])
@@ -833,7 +832,9 @@ def _cast_primitive(origins, dirs, prim, ray_indices,
 
 def _cast_mesh(origins, dirs, mesh, ray_indices,
                best_t, best_color, best_normal, best_pid):
-    """Test a subset of rays against a mesh (via the mesh's internal BVH)."""
+    """Test a subset of rays against a mesh (via the mesh's internal BVH).
+    Uses Mesh's cached triangle edges (built once in __post_init__).
+    """
     if len(ray_indices) == 0:
         return
     # Build mesh BVH lazily over triangles
@@ -841,11 +842,7 @@ def _cast_mesh(origins, dirs, mesh, ray_indices,
         tri_aabbs = _triangle_aabbs(mesh.vertices, mesh.faces)
         mesh._bvh = build_bvh(tri_aabbs, max_leaf=8)
 
-    v0 = mesh.vertices[mesh.faces[:, 0]]
-    v1 = mesh.vertices[mesh.faces[:, 1]]
-    v2 = mesh.vertices[mesh.faces[:, 2]]
-    edge1 = v1 - v0
-    edge2 = v2 - v0
+    v0, edge1, edge2 = mesh._tri_v0, mesh._tri_e1, mesh._tri_e2
     color = np.array(mesh.color)
 
     def _walk(node, ray_idx):
@@ -963,81 +960,6 @@ def _load_stl_ascii(buf: bytes, color, piece_id) -> Mesh:
 
 
 # ──────────────────────────────────────────────────────────
-# FRUSTUM CULLING (pinhole only)
-# ──────────────────────────────────────────────────────────
-def pinhole_frustum_planes(cam, near: float = 0.05, far: float = 1000.0) -> np.ndarray:
-    """Return 6 plane equations (a, b, c, d) such that a point is INSIDE the
-    frustum iff a·x + b·y + c·z + d ≤ 0 for all 6 planes (inward-normal form).
-
-    Only meaningful for pinhole/telephoto cameras with finite FOV.
-    """
-    forward = cam.target - cam.position
-    forward = forward / np.linalg.norm(forward)
-    right = np.cross(forward, cam.up)
-    rn = np.linalg.norm(right)
-    if rn < EPS:
-        alt = np.array([0., 0., 1.]) if abs(cam.up[2]) < 0.99 else np.array([1., 0., 0.])
-        right = np.cross(forward, alt)
-        right = right / np.linalg.norm(right)
-    else:
-        right = right / rn
-    up = np.cross(right, forward)
-    aspect = cam.width / cam.height
-    half_v = math.tan(math.radians(cam.fov_deg) / 2)
-    half_h = half_v * aspect
-    pos = cam.position
-    # 6 planes: near, far, left, right, top, bottom (inward normals)
-    planes = []
-    # Near plane: outward normal = -forward, so inward = +forward;
-    # point on near plane = pos + near*forward
-    near_pt = pos + near * forward
-    n_in = -forward
-    planes.append(np.append(n_in, -n_in @ near_pt))
-    far_pt = pos + far * forward
-    n_in = forward
-    planes.append(np.append(n_in, -n_in @ far_pt))
-    # Side planes — normals point inward toward the frustum interior
-    left_n = -(forward * half_h + right) / math.sqrt(1 + half_h * half_h)
-    right_n = -(forward * half_h - right) / math.sqrt(1 + half_h * half_h)
-    top_n = -(forward * half_v - up) / math.sqrt(1 + half_v * half_v)
-    bot_n = -(forward * half_v + up) / math.sqrt(1 + half_v * half_v)
-    for n in (left_n, right_n, top_n, bot_n):
-        planes.append(np.append(n, -n @ pos))
-    return np.stack(planes)
-
-
-def aabb_outside_frustum(aabb_min, aabb_max, planes) -> bool:
-    """True if the AABB is entirely on the outside (positive) side of ANY
-    frustum plane. Conservative — may keep some AABBs that aren't visible,
-    but won't reject any that are."""
-    # For each plane, find the corner of the AABB farthest in the inward
-    # direction. If even that corner is on the outside, the AABB is outside.
-    for p in planes:
-        n = p[:3]; d = p[3]
-        # Choose corner maximizing -(n·v + d)
-        corner = np.where(n > 0, aabb_min, aabb_max)
-        if n @ corner + d > 0:
-            return True
-    return False
-
-
-def cull_scene_to_frustum(scene: Scene, planes: np.ndarray) -> Scene:
-    """Return a new Scene containing only items whose AABBs aren't entirely
-    outside the frustum. The pruned scene gets a fresh BVH on first cast."""
-    if planes is None or len(planes) == 0:
-        return scene
-    pruned = Scene()
-    for p in scene.primitives:
-        ab = _primitive_aabb(p)
-        if not aabb_outside_frustum(ab[0], ab[1], planes):
-            pruned.primitives.append(p)
-    for m in scene.meshes:
-        if not aabb_outside_frustum(m.aabb_min, m.aabb_max, planes):
-            pruned.meshes.append(m)
-    return pruned
-
-
-# ──────────────────────────────────────────────────────────
 # BACKWARDS-COMPATIBLE cast_rays
 # ──────────────────────────────────────────────────────────
 _legacy_cast_rays = cast_rays  # save the original linear-scan implementation
@@ -1063,20 +985,6 @@ def cast_rays(origins, dirs, scene_or_prims):
 
 
 
-def _basis(cam: Camera):
-    forward = cam.target - cam.position
-    forward = forward / np.linalg.norm(forward)
-    right = np.cross(forward, cam.up)
-    rn = np.linalg.norm(right)
-    if rn < EPS:
-        # Gimbal-lock fallback for cameras pointing along the up axis
-        alt = np.array([0., 0., 1.]) if abs(cam.up[2]) < 0.99 else np.array([1., 0., 0.])
-        right = np.cross(forward, alt)
-        right = right / np.linalg.norm(right)
-    else:
-        right = right / rn
-    up = np.cross(right, forward)
-    return forward, right, up
 
 
 def _stratified_pixels(W: int, H: int, n_samples: int, rng) -> Tuple[np.ndarray, np.ndarray]:
@@ -1103,7 +1011,7 @@ def rays_pinhole(cam: Camera, n_samples: int, rng) -> Tuple[np.ndarray, np.ndarr
     px, py = _stratified_pixels(W, H, n_samples, rng)
     ndc_x = (px / W - 0.5) * 2 * half_w
     ndc_y = (0.5 - py / H) * 2 * half_h
-    forward, right, up = _basis(cam)
+    forward, right, up = _camera_basis(cam)
     dirs = (forward[None, :]
             + ndc_x[:, None] * right[None, :]
             + ndc_y[:, None] * up[None, :])
@@ -1138,7 +1046,7 @@ def rays_fisheye(cam: Camera, n_samples: int, rng) -> Tuple[np.ndarray, np.ndarr
 
     theta = r * max_theta
     phi = np.arctan2(ndc_y, ndc_x)
-    forward, right, up = _basis(cam)
+    forward, right, up = _camera_basis(cam)
     cos_t, sin_t = np.cos(theta), np.sin(theta)
     cos_p, sin_p = np.cos(phi), np.sin(phi)
     dirs = (cos_t[:, None] * forward[None, :]
@@ -1162,7 +1070,7 @@ def rays_orthographic(cam: Camera, n_samples: int, rng) -> Tuple[np.ndarray, np.
     px, py = _stratified_pixels(W, H, n_samples, rng)
     ndc_x = (px / W - 0.5) * 2 * half_w
     ndc_y = (0.5 - py / H) * 2 * half_h
-    forward, right, up = _basis(cam)
+    forward, right, up = _camera_basis(cam)
     n_rays = len(px)
     dirs = np.tile(forward[None, :], (n_rays, 1))
     origins = (cam.position[None, :]
@@ -1182,7 +1090,7 @@ def rays_equirectangular(cam: Camera, n_samples: int, rng) -> Tuple[np.ndarray, 
     lon = (px / W - 0.5) * 2 * math.pi
     lat = (0.5 - py / H) * math.pi
 
-    forward, right, up = _basis(cam)
+    forward, right, up = _camera_basis(cam)
     cos_lat = np.cos(lat); sin_lat = np.sin(lat)
     cos_lon = np.cos(lon); sin_lon = np.sin(lon)
     dirs = (cos_lat[:, None] * (cos_lon[:, None] * forward[None, :]
@@ -1255,7 +1163,7 @@ def cubemap_cameras(position, width: int = 400, height: int = 400) -> List[Tuple
 # ──────────────────────────────────────────────────────────
 def _project_pinhole(points: np.ndarray, cam: Camera):
     """Inverse of rays_pinhole: world point → (sx, sy, depth, in_bounds)."""
-    forward, right, up = _basis(cam)
+    forward, right, up = _camera_basis(cam)
     W, H = cam.width, cam.height
     aspect = W / H
     fov_rad = math.radians(cam.fov_deg)
@@ -1279,7 +1187,7 @@ def _project_pinhole(points: np.ndarray, cam: Camera):
 
 def _project_fisheye(points: np.ndarray, cam: Camera):
     """Inverse of rays_fisheye (equidistant projection)."""
-    forward, right, up = _basis(cam)
+    forward, right, up = _camera_basis(cam)
     W, H = cam.width, cam.height
     max_theta = math.radians(cam.fisheye_fov_deg / 2)
 
@@ -1313,7 +1221,7 @@ def _project_fisheye(points: np.ndarray, cam: Camera):
 
 def _project_orthographic(points: np.ndarray, cam: Camera):
     """Inverse of rays_orthographic. Depth = along-forward distance."""
-    forward, right, up = _basis(cam)
+    forward, right, up = _camera_basis(cam)
     W, H = cam.width, cam.height
     aspect = W / H
     half_w = cam.ortho_size
@@ -1333,7 +1241,7 @@ def _project_orthographic(points: np.ndarray, cam: Camera):
 
 def _project_equirectangular(points: np.ndarray, cam: Camera):
     """Inverse of rays_equirectangular. Depth = distance from camera."""
-    forward, right, up = _basis(cam)
+    forward, right, up = _camera_basis(cam)
     W, H = cam.width, cam.height
 
     rel = points - cam.position
