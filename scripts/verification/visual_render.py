@@ -38,6 +38,9 @@ import sys
 import math
 import json
 import argparse
+import threading
+import socketserver
+import http.server
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -93,39 +96,90 @@ _PATCH_RULES = [
 ]
 
 
+def _find_vendor_dir() -> str | None:
+    """Walk up from this file looking for vendor/three.r128.min.js."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    for _ in range(6):
+        candidate = os.path.join(here, "vendor", "three.r128.min.js")
+        if os.path.exists(candidate):
+            return os.path.join(here, "vendor")
+        here = os.path.dirname(here)
+    return None
+
+
+# Minimal OrbitControls stub — enough for our scaffolds; not interactive,
+# but prevents the `new OrbitControls(...)` call from throwing.
+_ORBIT_STUB = """\
+class OrbitControls {
+    constructor(cam, dom) {
+        this.target = new THREE.Vector3();
+        this.enableDamping = false;
+    }
+    update() {}
+    addEventListener() {}
+    removeEventListener() {}
+    dispose() {}
+}
+"""
+
+
 def patch_html_for_camera_access(html: str, vendor_dir: str | None = None) -> str:
     """Patch scaffold HTML so camera is reachable as window.camera.
 
-    Also resolves the /vendor/three.r128.min.js script src to an inline
-    script so the HTML can be opened via file:// without a server.
+    Handles two scaffold styles:
+    1. Old UMD style — <script src="/vendor/three.r128.min.js"> — inlines Three.js
+       so file:// loading works without a server.
+    2. New ES module style — <script type="importmap"> with CDN URLs — replaces the
+       importmap + module imports with the local UMD build + an OrbitControls stub,
+       then strips the ES import statements and converts the module script to a
+       regular script.  Works offline, no server needed.
+
     Idempotent: if already patched, returns input unchanged.
     """
     if "window.camera" in html:
         return html
 
-    # Inline Three.js so file:// loading works without a server
     if vendor_dir is None:
-        # Walk up from this file to find vendor/
-        here = os.path.dirname(os.path.abspath(__file__))
-        for _ in range(5):
-            candidate = os.path.join(here, "vendor", "three.r128.min.js")
-            if os.path.exists(candidate):
-                vendor_dir = os.path.join(here, "vendor")
-                break
-            here = os.path.dirname(here)
+        vendor_dir = _find_vendor_dir()
+
+    three_js = None
     if vendor_dir:
         three_path = os.path.join(vendor_dir, "three.r128.min.js")
         if os.path.exists(three_path):
             three_js = open(three_path).read()
-            inline = f"<script>{three_js}</script>"
-            # Use lambda to avoid re treating the replacement as a regex template
-            html = re.sub(
-                r'<script src="[^"]*three[^"]*\.js"></script>',
-                lambda _: inline,
-                html,
-                count=1,
-            )
 
+    # ── Path 1: Old UMD scaffold — inline Three.js from vendor ───────────────
+    if '<script src=' in html and 'three' in html and three_js:
+        inline = f"<script>{three_js}</script>"
+        html = re.sub(
+            r'<script src="[^"]*three[^"]*\.js"></script>',
+            lambda _: inline,
+            html, count=1,
+        )
+
+    # ── Path 2: New ES module scaffold — importmap + CDN ─────────────────────
+    if 'type="importmap"' in html or "type='importmap'" in html:
+        if three_js is None:
+            raise RuntimeError(
+                "patch_html_for_camera_access: ES module scaffold detected but "
+                "vendor/three.r128.min.js not found. Cannot patch offline.\n"
+                "Run: (no install needed — vendor/ ships with the repo)"
+            )
+        inline_block = f"<script>{three_js}\n{_ORBIT_STUB}</script>"
+        # Replace <script type="importmap">…</script> with the UMD inline block
+        html = re.sub(
+            r'<script\s+type=["\']importmap["\']>.*?</script>',
+            lambda _: inline_block,
+            html, flags=re.DOTALL, count=1,
+        )
+        # Remove ES module import statements (now unnecessary)
+        html = re.sub(r"[ \t]*import \* as THREE from ['\"]three['\"];?\s*\n", "", html)
+        html = re.sub(r"[ \t]*import \{[^}]+\} from ['\"]three/addons/[^'\"]*['\"];?\s*\n",
+                      "", html)
+        # Convert <script type="module"> to <script> so code runs in global scope
+        html = re.sub(r'<script\s+type=["\']module["\']>', "<script>", html, count=1)
+
+    # ── Camera / controls exposure (both paths) ───────────────────────────────
     out = html
     for pattern, replacement in _PATCH_RULES:
         out, _ = re.subn(pattern, replacement, out, count=1)
@@ -245,6 +299,7 @@ def render_scene_views(
         f.write(patched_html)
 
     os.makedirs(out_dir, exist_ok=True)
+    _server = None
     url = "file://" + os.path.abspath(patched_path)
 
     output_paths: dict[str, str] = {}
@@ -302,7 +357,27 @@ def render_scene_views(
 
         browser.close()
 
+    if _server is not None:
+        _server.shutdown()
+
     return output_paths
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Local HTTP server helper for ES module scaffolds
+# ────────────────────────────────────────────────────────────────────────────
+def _start_local_server(directory: str) -> tuple:
+    """Start a background HTTP server serving `directory`. Returns (server, port)."""
+    class _QuietHandler(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, *args): pass
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=directory, **kwargs)
+
+    server = socketserver.TCPServer(("127.0.0.1", 0), _QuietHandler)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, port
 
 
 # ────────────────────────────────────────────────────────────────────────────
