@@ -91,6 +91,9 @@ def primitives_from_scene(result, packets) -> List[Primitive]:
             elif shape == "sphere":
                 r = dims[0]
                 half = np.array([r, r, r])
+            elif shape == "cone":
+                # dims: [radius, height]; apex at +half_h, base at -half_h
+                half = np.array([dims[0], dims[1] / 2.0, 0.0])
             else:
                 continue
             mat = prim.get("material", {})
@@ -201,6 +204,66 @@ def ray_cylinder_local(origins: np.ndarray, dirs: np.ndarray,
     return t_min, normal
 
 
+def ray_cone_local(origins: np.ndarray, dirs: np.ndarray,
+                   r: float, half_h: float) -> Tuple[np.ndarray, np.ndarray]:
+    """Cone with apex at (0, +half_h, 0) and base radius r at y = -half_h.
+    Matches Three.js ConeGeometry orientation (apex up, base down).
+    """
+    ox, oy, oz = origins[:, 0], origins[:, 1], origins[:, 2]
+    dx, dy, dz = dirs[:, 0], dirs[:, 1], dirs[:, 2]
+
+    k2 = (r / (2.0 * half_h)) ** 2 if half_h > EPS else 0.0
+    apex_y = half_h
+    ay = apex_y - oy   # distance below apex
+
+    A = dx*dx + dz*dz - k2 * dy*dy
+    B = 2.0 * (ox*dx + oz*dz + k2 * ay * dy)
+    C = ox*ox + oz*oz - k2 * ay*ay
+
+    disc = B*B - 4.0*A*C
+    valid = disc >= 0.0
+    sqrt_disc = np.sqrt(np.where(disc < 0, 0, disc))
+    A_safe = np.where(np.abs(A) < EPS, EPS, A)
+
+    t1 = (-B - sqrt_disc) / (2.0 * A_safe)
+    t2 = (-B + sqrt_disc) / (2.0 * A_safe)
+
+    def _cone_ok(t_c):
+        y_h = oy + dy * t_c
+        return valid & (t_c > EPS) & (y_h >= -half_h) & (y_h <= half_h)
+
+    t1_f = np.where(_cone_ok(t1), t1, INF)
+    t2_f = np.where(_cone_ok(t2), t2, INF)
+    t_side = np.minimum(t1_f, t2_f)
+
+    # Base cap at y = -half_h
+    dy_safe = np.where(np.abs(dy) < EPS, np.where(dy >= 0, EPS, -EPS), dy)
+    t_cap = (-half_h - oy) / dy_safe
+    x_c = ox + dx * t_cap
+    z_c = oz + dz * t_cap
+    cap_ok = (t_cap > EPS) & (np.abs(dy) > EPS) & (x_c*x_c + z_c*z_c <= r*r)
+    t_cap_f = np.where(cap_ok, t_cap, INF)
+
+    use_cap = t_cap_f < t_side
+    t_min = np.minimum(t_side, t_cap_f)
+    hit = t_min < INF
+
+    normal = np.zeros_like(origins)
+    if hit.any():
+        side_hit = hit & ~use_cap
+        if side_hit.any():
+            xh = ox[side_hit] + dx[side_hit] * t_min[side_hit]
+            yh = oy[side_hit] + dy[side_hit] * t_min[side_hit]
+            zh = oz[side_hit] + dz[side_hit] * t_min[side_hit]
+            ny = k2 * (apex_y - yh)
+            n = np.stack([xh, ny, zh], axis=1)
+            n = n / np.linalg.norm(n, axis=1, keepdims=True).clip(EPS)
+            normal[side_hit] = n
+        normal[hit & use_cap] = np.array([0., -1., 0.])
+
+    return np.where(hit, t_min, INF), normal
+
+
 def ray_sphere(origins: np.ndarray, dirs: np.ndarray,
                center: np.ndarray, radius: float) -> Tuple[np.ndarray, np.ndarray]:
     oc = origins - center
@@ -240,6 +303,12 @@ def cast_rays(origins, dirs, prims):
                 t, n_local = ray_box_local(o_local, d_local, prim.half_extents)
             elif prim.shape == "cylinder":
                 t, n_local = ray_cylinder_local(
+                    o_local, d_local,
+                    r=float(prim.half_extents[0]),
+                    half_h=float(prim.half_extents[1]),
+                )
+            elif prim.shape == "cone":
+                t, n_local = ray_cone_local(
                     o_local, d_local,
                     r=float(prim.half_extents[0]),
                     half_h=float(prim.half_extents[1]),
@@ -740,6 +809,12 @@ def _cast_primitive(origins, dirs, prim, ray_indices,
             t, n_local = ray_box_local(o_local, d_local, prim.half_extents)
         elif prim.shape == "cylinder":
             t, n_local = ray_cylinder_local(
+                o_local, d_local,
+                r=float(prim.half_extents[0]),
+                half_h=float(prim.half_extents[1]),
+            )
+        elif prim.shape == "cone":
+            t, n_local = ray_cone_local(
                 o_local, d_local,
                 r=float(prim.half_extents[0]),
                 half_h=float(prim.half_extents[1]),
