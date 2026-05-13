@@ -1,37 +1,25 @@
 """
-lidar_lenses.py — standalone single-file engine.
+lidar_lenses.py — standalone single-file engine (v0.2.0)
 
-Multi-lens analytic raycaster with attention-weighted fusion. Pure numpy + PIL.
+Multi-lens analytic raycaster with attention-weighted fusion, triangle
+mesh support, BVH acceleration, and STL loading. Pure numpy + PIL.
 Drop this single file into any sandbox; no package install needed.
 
-Original — three real fixes on top of v2.
+Original, intersection routines, BVH, scene
+loading, rendering. Pure numpy + PIL.
 
-Changes vs v2:
-  - fuse_bursts_attention now uses SOURCE ray directions (b.dirs[hit_idx])
-    for the angular weight, not the canonical camera direction. The
-    confidence of a hit should depend on which camera saw it head-on,
-    not on which way the canonical camera happens to face. v2 stored the
-    dirs in the Burst but didn't use them. v3 does.
+v0.2.0 additions over v3:
+  - Triangle meshes (Mesh dataclass) with vectorized Möller-Trumbore intersection
+  - Two-level BVH acceleration (top-level over scene items + per-mesh over triangles)
+  - Scene dataclass holding primitives + meshes + cached BVH
+  - STL loader (binary + ASCII) for importing arbitrary 3D models
+  - Frustum culling helpers for pinhole cameras
 
-  - ray_cylinder_local now tests BOTH roots independently and takes the
-    nearest valid one. v2 picked t_side1 if positive then bailed if its y
-    was outside half_h, missing valid hits where the entry was outside
-    the cylinder height but the exit was inside.
-
-  - fuse_bursts_attention accumulates at TILE resolution, not pixel
-    resolution. The accumulator key is (sx//tile, sy//tile, bucket); each
-    tile is then written to its full (tile x tile) block of pixels. At
-    tile=2, each accumulator entry collects ~4x more hits, which is what
-    finally puts Σw in the saturating range of 1 - exp(-Σw).
-
-Minor polish:
-  - ray_box_local uses argmin/argmax for normal axis selection (cleaner;
-    handles corner ties to a unit normal instead of a sum).
-  - render_burst supports auto_calibrate=True to pick near/far from the
-    actual depth distribution per burst.
-  - fuse_bursts_attention takes `tile` and `alpha_gain` as parameters.
+The cast_rays API accepts either a list of Primitives (legacy) or a Scene
+(new). When given a list, it wraps in a Scene and builds a BVH transparently.
 """
 import math
+import struct
 from dataclasses import dataclass, field
 from typing import List, Tuple
 
@@ -510,6 +498,490 @@ def composite_grid(images, labels, cols=3, pad=8, label_h=24, bg="#0a0a0e"):
         sheet.paste(img, (x, y + label_h))
         draw.text((x + 4, y + 4), label, fill="#cce0e0")
     return sheet
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# v0.2.0 ADDITIONS — Triangle meshes, BVH acceleration, Scene container
+# ══════════════════════════════════════════════════════════════════════════
+
+# ──────────────────────────────────────────────────────────
+# TRIANGLE MESH
+# ──────────────────────────────────────────────────────────
+@dataclass
+class Mesh:
+    """Triangle mesh. Holds many triangles sharing a transform and material.
+
+    Fields:
+        vertices:     (N_v, 3) world-space vertex positions
+        faces:        (N_f, 3) int — indices into vertices
+        face_normals: (N_f, 3) — precomputed unit normals (auto if None at init)
+        color:        single RGB tuple, applied to all faces (per-face colors
+                      can be added later)
+        piece_id, piece_type: same role as Primitive's fields
+
+    The mesh stores its own internal BVH over its triangles, built lazily on
+    first ray-cast.
+    """
+    vertices: np.ndarray
+    faces: np.ndarray
+    color: Tuple[float, float, float]
+    piece_id: int
+    piece_type: str = "mesh"
+    face_normals: np.ndarray = None
+    aabb_min: np.ndarray = None
+    aabb_max: np.ndarray = None
+    _bvh: object = None  # BVHNode, built lazily
+
+    def __post_init__(self):
+        self.vertices = np.asarray(self.vertices, dtype=np.float64)
+        self.faces = np.asarray(self.faces, dtype=np.int64)
+        if self.face_normals is None:
+            self.face_normals = _compute_face_normals(self.vertices, self.faces)
+        if self.aabb_min is None:
+            self.aabb_min = self.vertices.min(axis=0)
+            self.aabb_max = self.vertices.max(axis=0)
+
+
+def _compute_face_normals(vertices: np.ndarray, faces: np.ndarray) -> np.ndarray:
+    """Per-face unit normals via cross product of two edges."""
+    v0 = vertices[faces[:, 0]]
+    v1 = vertices[faces[:, 1]]
+    v2 = vertices[faces[:, 2]]
+    n = np.cross(v1 - v0, v2 - v0)
+    norms = np.linalg.norm(n, axis=1, keepdims=True).clip(EPS)
+    return n / norms
+
+
+def _triangle_aabbs(vertices: np.ndarray, faces: np.ndarray) -> np.ndarray:
+    """AABB for each triangle: (N_f, 2, 3) where [...,0]=min, [...,1]=max."""
+    v = vertices[faces]  # (N_f, 3, 3)
+    return np.stack([v.min(axis=1), v.max(axis=1)], axis=1)
+
+
+def ray_triangle_batch(origins: np.ndarray, dirs: np.ndarray,
+                       v0: np.ndarray, edge1: np.ndarray, edge2: np.ndarray
+                       ) -> Tuple[np.ndarray, np.ndarray]:
+    """Möller-Trumbore: each ray vs each triangle in the batch.
+
+    Args:
+        origins: (R, 3)
+        dirs:    (R, 3)
+        v0:      (T, 3) triangle vertex 0
+        edge1:   (T, 3) = v1 - v0
+        edge2:   (T, 3) = v2 - v0
+
+    Returns:
+        t_hit:  (R,) — nearest hit distance per ray; INF if miss
+        f_idx:  (R,) — index of winning triangle in the batch; -1 if miss
+    """
+    R, T = len(origins), len(v0)
+    if R == 0 or T == 0:
+        return np.full(R, INF), np.full(R, -1, dtype=np.int64)
+
+    # h = dirs × edge2 → (R, T, 3)
+    h = np.cross(dirs[:, None, :], edge2[None, :, :])
+    a = np.einsum("tk,rtk->rt", edge1, h)  # (R, T)
+    parallel = np.abs(a) < EPS
+    a_safe = np.where(parallel, 1.0, a)
+    f = 1.0 / a_safe
+
+    s = origins[:, None, :] - v0[None, :, :]            # (R, T, 3)
+    u = f * np.einsum("rtk,rtk->rt", s, h)              # (R, T)
+
+    q = np.cross(s, edge1[None, :, :])                   # (R, T, 3)
+    v_bary = f * np.einsum("rk,rtk->rt", dirs, q)        # (R, T)
+
+    t = f * np.einsum("tk,rtk->rt", edge2, q)            # (R, T)
+
+    valid = (~parallel) & (u >= 0) & (u <= 1) & \
+            (v_bary >= 0) & (u + v_bary <= 1) & (t > EPS)
+    t = np.where(valid, t, INF)
+    best_f = np.argmin(t, axis=1)
+    best_t = t[np.arange(R), best_f]
+    hit = best_t < INF
+    return np.where(hit, best_t, INF), np.where(hit, best_f, -1)
+
+
+# ──────────────────────────────────────────────────────────
+# BVH (axis-aligned bounding volume hierarchy)
+# ──────────────────────────────────────────────────────────
+@dataclass
+class BVHNode:
+    aabb_min: np.ndarray
+    aabb_max: np.ndarray
+    left: object = None       # BVHNode
+    right: object = None      # BVHNode
+    item_indices: np.ndarray = None  # leaf only: indices into source array
+
+    @property
+    def is_leaf(self) -> bool:
+        return self.item_indices is not None
+
+
+def build_bvh(aabbs: np.ndarray, max_leaf: int = 4) -> BVHNode:
+    """Build a BVH over a set of AABBs using simple median-split on the
+    longest axis. Returns the root node.
+
+    Args:
+        aabbs: (N, 2, 3) — aabbs[i,0]=min, aabbs[i,1]=max
+        max_leaf: max items per leaf
+    """
+    N = len(aabbs)
+    if N == 0:
+        return BVHNode(aabb_min=np.zeros(3), aabb_max=np.zeros(3),
+                       item_indices=np.array([], dtype=np.int64))
+    indices = np.arange(N)
+
+    def _recurse(idx):
+        if len(idx) <= max_leaf:
+            mn = aabbs[idx, 0].min(axis=0)
+            mx = aabbs[idx, 1].max(axis=0)
+            return BVHNode(aabb_min=mn, aabb_max=mx,
+                           item_indices=idx.astype(np.int64))
+        # Split along longest axis at the median of centroids
+        centers = (aabbs[idx, 0] + aabbs[idx, 1]) / 2
+        extents = aabbs[idx, 1].max(axis=0) - aabbs[idx, 0].min(axis=0)
+        axis = int(np.argmax(extents))
+        order = np.argsort(centers[:, axis])
+        idx_sorted = idx[order]
+        mid = len(idx_sorted) // 2
+        left = _recurse(idx_sorted[:mid])
+        right = _recurse(idx_sorted[mid:])
+        mn = np.minimum(left.aabb_min, right.aabb_min)
+        mx = np.maximum(left.aabb_max, right.aabb_max)
+        return BVHNode(aabb_min=mn, aabb_max=mx, left=left, right=right)
+
+    return _recurse(indices)
+
+
+def _bvh_aabb_test_batch(node: BVHNode, origins: np.ndarray, dirs: np.ndarray,
+                         current_best_t: np.ndarray) -> np.ndarray:
+    """Return a boolean mask: which rays could still hit this node's AABB
+    before their current best_t. Uses >= for tangent-ray acceptance so that
+    zero-extent AABBs (e.g. coplanar triangles) don't get falsely rejected.
+    """
+    if len(origins) == 0:
+        return np.array([], dtype=bool)
+    inv = _safe_inverse(dirs)
+    t1 = (node.aabb_min - origins) * inv
+    t2 = (node.aabb_max - origins) * inv
+    t_near = np.minimum(t1, t2).max(axis=1)
+    t_far = np.maximum(t1, t2).min(axis=1)
+    return (t_far >= t_near) & (t_far > EPS) & (t_near < current_best_t)
+
+
+# ──────────────────────────────────────────────────────────
+# SCENE CONTAINER + UNIFIED CAST
+# ──────────────────────────────────────────────────────────
+@dataclass
+class Scene:
+    """Container for primitives + meshes + cached top-level BVH."""
+    primitives: List[Primitive] = field(default_factory=list)
+    meshes: List[Mesh] = field(default_factory=list)
+    _bvh: BVHNode = None  # built lazily; items 0..N_prims-1 are primitives,
+                          # items N_prims..N_prims+N_meshes-1 are meshes
+
+    def build_bvh(self):
+        """Build the top-level BVH over all primitives + meshes."""
+        all_aabbs = []
+        for p in self.primitives:
+            all_aabbs.append(_primitive_aabb(p))
+        for m in self.meshes:
+            all_aabbs.append(np.stack([m.aabb_min, m.aabb_max]))
+        if not all_aabbs:
+            self._bvh = build_bvh(np.zeros((0, 2, 3)))
+            return
+        aabbs = np.stack(all_aabbs)
+        self._bvh = build_bvh(aabbs)
+
+    @property
+    def bvh(self):
+        if self._bvh is None:
+            self.build_bvh()
+        return self._bvh
+
+    @property
+    def n_primitives(self):
+        return len(self.primitives)
+
+
+def _primitive_aabb(p: Primitive) -> np.ndarray:
+    """World-space AABB for a primitive. Uses the primitive's bounding sphere
+    (max half-extent) as a conservative bound; tight for axis-aligned shapes.
+    """
+    # Conservative bound: use the max half-extent as a sphere radius
+    if p.shape == "sphere":
+        r = float(p.half_extents[0])
+        return np.stack([p.center - r, p.center + r])
+    elif p.shape == "cylinder":
+        r = float(p.half_extents[0])
+        h = float(p.half_extents[1])
+        # Loose for rotated cylinders; tight for axis-aligned
+        bound = max(r, h)
+        return np.stack([p.center - bound, p.center + bound])
+    else:  # box — use diagonal as conservative bound
+        bound = float(np.linalg.norm(p.half_extents))
+        return np.stack([p.center - bound, p.center + bound])
+
+
+def _cast_primitive(origins, dirs, prim, ray_indices,
+                    best_t, best_color, best_normal, best_pid):
+    """Test a subset of rays against one primitive; update best_* in place."""
+    if len(ray_indices) == 0:
+        return
+    o = origins[ray_indices]
+    d = dirs[ray_indices]
+    if prim.shape == "sphere":
+        t, normal = ray_sphere(o, d, prim.center, prim.half_extents[0])
+    else:
+        o_local = (o - prim.center) @ prim.rotation_matrix.T
+        d_local = d @ prim.rotation_matrix.T
+        if prim.shape == "box":
+            t, n_local = ray_box_local(o_local, d_local, prim.half_extents)
+        elif prim.shape == "cylinder":
+            t, n_local = ray_cylinder_local(
+                o_local, d_local,
+                r=float(prim.half_extents[0]),
+                half_h=float(prim.half_extents[1]),
+            )
+        else:
+            return
+        normal = n_local @ prim.inv_rotation_matrix.T
+    color = np.array(prim.color)
+    closer = t < best_t[ray_indices]
+    upd_idx = ray_indices[closer]
+    best_t[upd_idx] = t[closer]
+    best_color[upd_idx] = color
+    best_normal[upd_idx] = normal[closer]
+    best_pid[upd_idx] = prim.piece_id
+
+
+def _cast_mesh(origins, dirs, mesh, ray_indices,
+               best_t, best_color, best_normal, best_pid):
+    """Test a subset of rays against a mesh (via the mesh's internal BVH)."""
+    if len(ray_indices) == 0:
+        return
+    # Build mesh BVH lazily over triangles
+    if mesh._bvh is None:
+        tri_aabbs = _triangle_aabbs(mesh.vertices, mesh.faces)
+        mesh._bvh = build_bvh(tri_aabbs, max_leaf=8)
+
+    v0 = mesh.vertices[mesh.faces[:, 0]]
+    v1 = mesh.vertices[mesh.faces[:, 1]]
+    v2 = mesh.vertices[mesh.faces[:, 2]]
+    edge1 = v1 - v0
+    edge2 = v2 - v0
+    color = np.array(mesh.color)
+
+    def _walk(node, ray_idx):
+        if len(ray_idx) == 0:
+            return
+        mask = _bvh_aabb_test_batch(node, origins[ray_idx], dirs[ray_idx], best_t[ray_idx])
+        sur = ray_idx[mask]
+        if len(sur) == 0:
+            return
+        if node.is_leaf:
+            fi = node.item_indices
+            t_hit, f_hit = ray_triangle_batch(
+                origins[sur], dirs[sur], v0[fi], edge1[fi], edge2[fi]
+            )
+            closer = t_hit < best_t[sur]
+            upd = sur[closer]
+            best_t[upd] = t_hit[closer]
+            best_color[upd] = color
+            # Map local face index back to global face index
+            winning_global = fi[f_hit[closer]]
+            best_normal[upd] = mesh.face_normals[winning_global]
+            best_pid[upd] = mesh.piece_id
+        else:
+            _walk(node.left, sur)
+            _walk(node.right, sur)
+
+    _walk(mesh._bvh, ray_indices)
+
+
+def cast_rays_scene(origins: np.ndarray, dirs: np.ndarray, scene: Scene):
+    """BVH-accelerated ray cast against a Scene (primitives + meshes)."""
+    N = len(origins)
+    best_t = np.full(N, INF)
+    best_color = np.zeros((N, 3))
+    best_normal = np.zeros((N, 3))
+    best_pid = np.full(N, -1, dtype=np.int64)
+
+    if N == 0 or (scene.n_primitives == 0 and len(scene.meshes) == 0):
+        return best_t, best_color, best_normal, best_pid
+
+    n_prims = scene.n_primitives
+
+    def _walk(node, ray_idx):
+        if len(ray_idx) == 0:
+            return
+        mask = _bvh_aabb_test_batch(node, origins[ray_idx], dirs[ray_idx], best_t[ray_idx])
+        sur = ray_idx[mask]
+        if len(sur) == 0:
+            return
+        if node.is_leaf:
+            for item_idx in node.item_indices:
+                if item_idx < n_prims:
+                    _cast_primitive(origins, dirs, scene.primitives[item_idx], sur,
+                                    best_t, best_color, best_normal, best_pid)
+                else:
+                    mesh = scene.meshes[item_idx - n_prims]
+                    _cast_mesh(origins, dirs, mesh, sur,
+                               best_t, best_color, best_normal, best_pid)
+        else:
+            _walk(node.left, sur)
+            _walk(node.right, sur)
+
+    _walk(scene.bvh, np.arange(N))
+    return best_t, best_color, best_normal, best_pid
+
+
+# ──────────────────────────────────────────────────────────
+# STL LOADER (binary + ASCII)
+# ──────────────────────────────────────────────────────────
+def load_stl(path: str, color=(0.7, 0.7, 0.7), piece_id: int = 1000) -> Mesh:
+    """Load an STL file (binary or ASCII) as a Mesh.
+
+    Auto-detects format by looking at the file header AND scanning for the
+    'facet normal' landmark (which appears in ASCII STLs but is unlikely
+    as a coincidence in binary data).
+    """
+    with open(path, "rb") as f:
+        all_bytes = f.read()
+    is_ascii = (all_bytes.lstrip().startswith(b"solid")
+                and b"facet normal" in all_bytes[:10000])
+    if is_ascii:
+        return _load_stl_ascii(all_bytes, color, piece_id)
+    # Binary: skip the 80-byte header
+    return _load_stl_binary(all_bytes[80:], color, piece_id)
+
+
+def _load_stl_binary(buf: bytes, color, piece_id) -> Mesh:
+    n_tri = struct.unpack("<I", buf[:4])[0]
+    verts = np.zeros((n_tri * 3, 3), dtype=np.float64)
+    faces = np.arange(n_tri * 3, dtype=np.int64).reshape(n_tri, 3)
+    off = 4
+    for i in range(n_tri):
+        # Per-triangle layout: 12 bytes normal + 36 bytes (3 vertices × 3 floats)
+        # + 2 bytes attribute count = 50 bytes. Read just the 9 vertex floats.
+        v = struct.unpack("<9f", buf[off + 12 : off + 48])
+        verts[i * 3]     = v[0:3]
+        verts[i * 3 + 1] = v[3:6]
+        verts[i * 3 + 2] = v[6:9]
+        off += 50
+    return Mesh(vertices=verts, faces=faces, color=color, piece_id=piece_id)
+
+
+def _load_stl_ascii(buf: bytes, color, piece_id) -> Mesh:
+    text = buf.decode("utf-8", errors="replace")
+    verts = []
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("vertex "):
+            parts = line.split()
+            verts.append([float(parts[1]), float(parts[2]), float(parts[3])])
+    verts = np.array(verts, dtype=np.float64)
+    n_tri = len(verts) // 3
+    faces = np.arange(n_tri * 3, dtype=np.int64).reshape(n_tri, 3)
+    return Mesh(vertices=verts[:n_tri * 3], faces=faces, color=color, piece_id=piece_id)
+
+
+# ──────────────────────────────────────────────────────────
+# FRUSTUM CULLING (pinhole only)
+# ──────────────────────────────────────────────────────────
+def pinhole_frustum_planes(cam, near: float = 0.05, far: float = 1000.0) -> np.ndarray:
+    """Return 6 plane equations (a, b, c, d) such that a point is INSIDE the
+    frustum iff a·x + b·y + c·z + d ≤ 0 for all 6 planes (inward-normal form).
+
+    Only meaningful for pinhole/telephoto cameras with finite FOV.
+    """
+    forward = cam.target - cam.position
+    forward = forward / np.linalg.norm(forward)
+    right = np.cross(forward, cam.up)
+    rn = np.linalg.norm(right)
+    if rn < EPS:
+        alt = np.array([0., 0., 1.]) if abs(cam.up[2]) < 0.99 else np.array([1., 0., 0.])
+        right = np.cross(forward, alt)
+        right = right / np.linalg.norm(right)
+    else:
+        right = right / rn
+    up = np.cross(right, forward)
+    aspect = cam.width / cam.height
+    half_v = math.tan(math.radians(cam.fov_deg) / 2)
+    half_h = half_v * aspect
+    pos = cam.position
+    # 6 planes: near, far, left, right, top, bottom (inward normals)
+    planes = []
+    # Near plane: outward normal = -forward, so inward = +forward;
+    # point on near plane = pos + near*forward
+    near_pt = pos + near * forward
+    n_in = -forward
+    planes.append(np.append(n_in, -n_in @ near_pt))
+    far_pt = pos + far * forward
+    n_in = forward
+    planes.append(np.append(n_in, -n_in @ far_pt))
+    # Side planes — normals point inward toward the frustum interior
+    left_n = -(forward * half_h + right) / math.sqrt(1 + half_h * half_h)
+    right_n = -(forward * half_h - right) / math.sqrt(1 + half_h * half_h)
+    top_n = -(forward * half_v - up) / math.sqrt(1 + half_v * half_v)
+    bot_n = -(forward * half_v + up) / math.sqrt(1 + half_v * half_v)
+    for n in (left_n, right_n, top_n, bot_n):
+        planes.append(np.append(n, -n @ pos))
+    return np.stack(planes)
+
+
+def aabb_outside_frustum(aabb_min, aabb_max, planes) -> bool:
+    """True if the AABB is entirely on the outside (positive) side of ANY
+    frustum plane. Conservative — may keep some AABBs that aren't visible,
+    but won't reject any that are."""
+    # For each plane, find the corner of the AABB farthest in the inward
+    # direction. If even that corner is on the outside, the AABB is outside.
+    for p in planes:
+        n = p[:3]; d = p[3]
+        # Choose corner maximizing -(n·v + d)
+        corner = np.where(n > 0, aabb_min, aabb_max)
+        if n @ corner + d > 0:
+            return True
+    return False
+
+
+def cull_scene_to_frustum(scene: Scene, planes: np.ndarray) -> Scene:
+    """Return a new Scene containing only items whose AABBs aren't entirely
+    outside the frustum. The pruned scene gets a fresh BVH on first cast."""
+    if planes is None or len(planes) == 0:
+        return scene
+    pruned = Scene()
+    for p in scene.primitives:
+        ab = _primitive_aabb(p)
+        if not aabb_outside_frustum(ab[0], ab[1], planes):
+            pruned.primitives.append(p)
+    for m in scene.meshes:
+        if not aabb_outside_frustum(m.aabb_min, m.aabb_max, planes):
+            pruned.meshes.append(m)
+    return pruned
+
+
+# ──────────────────────────────────────────────────────────
+# BACKWARDS-COMPATIBLE cast_rays
+# ──────────────────────────────────────────────────────────
+_legacy_cast_rays = cast_rays  # save the original linear-scan implementation
+
+
+def cast_rays(origins, dirs, scene_or_prims):
+    """Cast rays against a Scene (BVH-accelerated) or a list of Primitives
+    (legacy linear scan; for big scenes wrap in Scene() for BVH speedup).
+    """
+    if isinstance(scene_or_prims, Scene):
+        return cast_rays_scene(origins, dirs, scene_or_prims)
+    if isinstance(scene_or_prims, list):
+        # Auto-wrap into a Scene only if it's worth it (≥8 primitives).
+        # Smaller scenes are faster without BVH overhead.
+        if len(scene_or_prims) >= 8:
+            scene = Scene(primitives=list(scene_or_prims))
+            return cast_rays_scene(origins, dirs, scene)
+        return _legacy_cast_rays(origins, dirs, scene_or_prims)
+    raise TypeError(f"cast_rays expects Scene or list of Primitive, got {type(scene_or_prims)}")
 
 
 # ── LENS EXTENSION (merged from lenses.py) ──────────────────────────────
